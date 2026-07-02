@@ -7,7 +7,9 @@
     "icon": "./assets/favicon.png",
     "scheme": "tayproconsole",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.taypro.console"
@@ -39,6 +41,12 @@
       "eas": {
         "projectId": "4ac8042a-cb26-475c-9295-4888b4848895"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/4ac8042a-cb26-475c-9295-4888b4848895"
     }
   }
 }
