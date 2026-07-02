@@ -1,25 +1,44 @@
 {
   "expo": {
-    "name": "taypro-console-react-native",
+    "name": "Taypro Console",
     "slug": "taypro-console-react-native",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/favicon.png",
+    "scheme": "tayproconsole",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "in.taypro.console"
     },
     "android": {
+      "package": "in.taypro.console",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/favicon.png",
+        "backgroundColor": "#0B0B0F"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/favicon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0B0F"
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "4ac8042a-cb26-475c-9295-4888b4848895"
+      }
     }
   }
 }

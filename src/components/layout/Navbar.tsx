@@ -1,0 +1,177 @@
+import React from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { DrawerActions, useNavigation } from "@react-navigation/native";
+import { useTheme } from "../../theme";
+import { spacing } from "../../theme/spacing";
+import { typography } from "../../theme/typography";
+import { Badge } from "../ui/Badge";
+import { Logo } from "../ui/Logo";
+
+type Props = {
+  title: string;
+  subtitle?: string;
+  showMenu?: boolean;
+  showLogo?: boolean;
+  showThemeToggle?: boolean;
+  notificationCount?: number;
+  onThemeToggle?: () => void;
+  leftAction?: React.ReactNode;
+};
+
+export function Navbar({
+  title,
+  subtitle,
+  showMenu = true,
+  showLogo = true,
+  showThemeToggle = true,
+  notificationCount = 0,
+  onThemeToggle,
+  leftAction,
+}: Props) {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+
+  const handleThemeToggle = onThemeToggle ?? toggleTheme;
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.navbar,
+          borderBottomColor: colors.border,
+          paddingTop: insets.top + spacing.xs,
+        },
+      ]}
+    >
+      <View style={styles.row}>
+        {leftAction ? (
+          leftAction
+        ) : showMenu ? (
+          <Pressable
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            style={[
+              styles.iconButton,
+              { backgroundColor: colors.backgroundTertiary },
+            ]}
+            hitSlop={6}
+          >
+            <Ionicons name="menu" size={18} color={colors.textPrimary} />
+          </Pressable>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
+
+        {/* {showLogo ? <Logo size="sm" /> : null} */}
+
+        <View style={styles.titleBlock}>
+          <Text
+            style={[styles.title, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text
+              style={[styles.subtitle, { color: colors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.actions}>
+          <Pressable
+            style={[
+              styles.iconButton,
+              { backgroundColor: colors.backgroundTertiary },
+            ]}
+            hitSlop={6}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={16}
+              color={colors.textPrimary}
+            />
+            {notificationCount > 0 ? (
+              <View style={styles.badgeWrap}>
+                <Badge
+                  label={
+                    notificationCount > 9 ? "9+" : String(notificationCount)
+                  }
+                  variant="error"
+                  size="sm"
+                />
+              </View>
+            ) : null}
+          </Pressable>
+
+          {showThemeToggle ? (
+            <Pressable
+              onPress={handleThemeToggle}
+              style={[
+                styles.iconButton,
+                { backgroundColor: colors.backgroundTertiary },
+              ]}
+              hitSlop={6}
+            >
+              <Ionicons
+                name={isDark ? "sunny-outline" : "moon-outline"}
+                size={16}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconPlaceholder: {
+    width: 32,
+  },
+  titleBlock: {
+    flex: 1,
+  },
+  title: {
+    ...typography.label,
+    fontSize: 14,
+  },
+  subtitle: {
+    ...typography.caption,
+    marginTop: 1,
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  badgeWrap: {
+    position: "absolute",
+    top: -3,
+    right: -5,
+  },
+});
