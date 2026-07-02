@@ -8,6 +8,22 @@ export type DrawerParamList = {
     siteId: string;
     siteName?: string;
   };
+  BlockManagement: {
+    siteId: string;
+    siteName?: string;
+    block: string;
+  };
+  RobotOperating: {
+    robotNo: string;
+    siteId: string;
+    block: string;
+    siteName?: string;
+  };
+  GatewayDetail: {
+    gatewayId: string;
+    gatewayName?: string;
+    gatewayType?: string;
+  };
   Sites: NavigatorScreenParams<SitesStackParamList> | undefined;
   Gateways: undefined;
   Users: undefined;

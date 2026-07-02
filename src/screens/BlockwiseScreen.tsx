@@ -14,11 +14,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import { Navbar, Screen } from "../components/layout";
+import { CompactCommandButton } from "../components/ui";
+import { fetchRobotsBySiteAndBlock, sendMqttMulticastDownlink } from "../api/robots";
 import { fetchSiteManagement } from "../api/siteManagement";
+import { useAuth } from "../context/AuthContext";
 import { useSiteDetails } from "../context/SiteDetailsContext";
 import { useTheme } from "../theme";
 import { radius, spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
+import { RobotCommand } from "../types/robotOperating";
 import { SiteBlock } from "../types/siteManagement";
 import { formatRobotTileCompact, sortBlocksByName } from "../utils/blockSort";
 import { getBatteryPercent, isRobotOnline } from "../utils/robot";
@@ -27,6 +31,11 @@ import type { ThemeColors } from "../theme/colors";
 
 type Route = RouteProp<DrawerParamList, "Blockwise">;
 type Navigation = DrawerNavigationProp<DrawerParamList, "Blockwise">;
+
+type BulkLoadingState = {
+  blockName: string;
+  command: RobotCommand;
+} | null;
 
 function getRobotTileTheme(online: boolean, colors: ThemeColors) {
   if (online) {
@@ -120,12 +129,22 @@ function BlockStatCell({
 
 function BlockCard({
   block,
-  onManage,
+  siteId,
+  canSendCommands,
+  bulkLoading,
+  onBulkCommand,
+  onRobotPress,
 }: {
   block: SiteBlock;
-  onManage: (blockName: string) => void;
+  siteId: string;
+  canSendCommands: boolean;
+  bulkLoading: BulkLoadingState;
+  onBulkCommand: (blockName: string, command: RobotCommand) => void;
+  onRobotPress: (robotNo: string, blockName: string) => void;
 }) {
   const { colors } = useTheme();
+  const isThisBlockLoading = bulkLoading?.blockName === block.block_name;
+  const loadingCommand = isThisBlockLoading ? bulkLoading?.command : null;
 
   return (
     <View
@@ -137,11 +156,42 @@ function BlockCard({
         },
       ]}
     >
-      <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>
-        {block.block_name}
-      </Text>
+      <View style={styles.blockHeader}>
+        <View style={styles.blockTitleWrap}>
+          <Text style={[styles.blockTitle, { color: colors.textPrimary }]}>
+            {block.block_name}
+          </Text>
+          <Text style={[styles.blockSubtitle, { color: colors.textMuted }]}>
+            {block.total_robot_count} robots
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.onlinePill,
+            {
+              backgroundColor: colors.badge.success.bg,
+              borderColor: "rgba(0, 201, 167, 0.25)",
+            },
+          ]}
+        >
+          <View
+            style={[styles.onlineDot, { backgroundColor: colors.primary }]}
+          />
+          <Text style={[styles.onlinePillText, { color: colors.primary }]}>
+            {block.online} online
+          </Text>
+        </View>
+      </View>
 
-      <View style={styles.blockStatsRow}>
+      <View
+        style={[
+          styles.blockStatsPanel,
+          {
+            backgroundColor: colors.backgroundTertiary,
+            borderColor: colors.border,
+          },
+        ]}
+      >
         <BlockStatCell
           label="Total"
           value={block.total_robot_count}
@@ -171,8 +221,13 @@ function BlockCard({
           const tileTheme = getRobotTileTheme(online, colors);
 
           return (
-            <View
+            <Pressable
               key={robot._id}
+              onPress={() => {
+                if (robot.robot_no) {
+                  onRobotPress(robot.robot_no, block.block_name);
+                }
+              }}
               style={[
                 styles.robotTile,
                 {
@@ -201,31 +256,46 @@ function BlockCard({
               >
                 {battery != null ? `${battery}%` : "—"}
               </Text>
-            </View>
+            </Pressable>
           );
         })}
       </View>
 
-      <Pressable
-        onPress={() => onManage(block.block_name)}
-        style={[
-          styles.manageButton,
-          {
-            backgroundColor: colors.backgroundTertiary,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <Text style={[styles.manageButtonText, { color: colors.textPrimary }]}>
-          MANAGE
-        </Text>
-      </Pressable>
+      <View
+        style={[styles.commandDivider, { backgroundColor: colors.border }]}
+      />
+
+      <View style={styles.commandRow}>
+        <CompactCommandButton
+          label="Start"
+          icon="play"
+          onPress={() => onBulkCommand(block.block_name, "start")}
+          loading={loadingCommand === "start"}
+          disabled={!canSendCommands || bulkLoading !== null}
+        />
+        <CompactCommandButton
+          label="Stop"
+          icon="stop"
+          tone="danger"
+          onPress={() => onBulkCommand(block.block_name, "stop")}
+          loading={loadingCommand === "stop"}
+          disabled={!canSendCommands || bulkLoading !== null}
+        />
+        <CompactCommandButton
+          label="Return"
+          icon="return-down-back"
+          onPress={() => onBulkCommand(block.block_name, "return")}
+          loading={loadingCommand === "return"}
+          disabled={!canSendCommands || bulkLoading !== null}
+        />
+      </View>
     </View>
   );
 }
 
 export function BlockwiseScreen() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
   const route = useRoute<Route>();
   const { selectedSite } = useSiteDetails();
@@ -240,6 +310,9 @@ export function BlockwiseScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [bulkLoading, setBulkLoading] = useState<BulkLoadingState>(null);
+
+  const canSendCommands = user?.robot_command_access !== false;
 
   const loadData = useCallback(
     async (isRefresh = false) => {
@@ -308,60 +381,136 @@ export function BlockwiseScreen() {
     return location ? `${name}, ${location}` : name;
   }, [data, fallbackSiteName]);
 
-  const handleStopAll = () => {
+  const sendBlockBulkCommand = async (
+    blockName: string,
+    command: RobotCommand,
+  ) => {
+    setBulkLoading({ blockName, command });
+
+    try {
+      const robots = await fetchRobotsBySiteAndBlock(siteId, blockName);
+      const commandable = robots.filter((robot) => robot.deveui && robot.robot_no);
+
+      if (!commandable.length) {
+        Alert.alert(
+          "No robots",
+          `No robots with command details in ${blockName}.`,
+        );
+        return;
+      }
+
+      const labels: Record<RobotCommand, string> = {
+        start: "Start All",
+        stop: "Stop All",
+        return: "Return All",
+      };
+
+      const result = await sendMqttMulticastDownlink(command, {
+        siteId,
+        block: blockName,
+        robots: commandable,
+      });
+
+      Alert.alert(
+        "Command sent",
+        result.message ||
+          `${labels[command]} sent to ${commandable.length} robot${commandable.length === 1 ? "" : "s"}.`,
+      );
+
+      void loadData(true);
+    } catch (err) {
+      Alert.alert(
+        "Command failed",
+        err instanceof Error ? err.message : "Failed to send block commands",
+      );
+    } finally {
+      setBulkLoading(null);
+    }
+  };
+
+  const handleBulkCommand = (blockName: string, command: RobotCommand) => {
+    if (!canSendCommands) {
+      Alert.alert("Access denied", "You do not have robot command access.");
+      return;
+    }
+
+    const labels: Record<RobotCommand, string> = {
+      start: "Start All",
+      stop: "Stop All",
+      return: "Return All",
+    };
+
+    const block = data?.blocks.find((item) => item.block_name === blockName);
+    const robotCount = block?.total_robot_count ?? 0;
+
     Alert.alert(
-      "Stop All",
-      "This action will stop all robots at the site. Continue?",
+      `${labels[command]} · ${blockName}`,
+      `Send ${labels[command].toLowerCase()} to robots in ${blockName}? (${robotCount} robots)`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Stop All", style: "destructive" },
+        {
+          text: labels[command],
+          style: command === "stop" ? "destructive" : "default",
+          onPress: () => void sendBlockBulkCommand(blockName, command),
+        },
       ],
     );
   };
 
-  const handleManage = (blockName: string) => {
-    Alert.alert(
-      "Manage Block",
-      `Block management for ${blockName} will be available soon.`,
-    );
+  const handleRobotPress = (robotNo: string, blockName: string) => {
+    navigation.navigate("RobotOperating", {
+      robotNo,
+      siteId,
+      siteName: fallbackSiteName,
+      block: blockName,
+    });
   };
 
   const listHeader = (
     <View style={styles.headerContent}>
-      <Text style={[styles.siteTitle, { color: colors.primary }]}>
-        {siteTitle}
-      </Text>
-
-      <View style={styles.actionRow}>
-        <Pressable
-          onPress={() => navigation.navigate("Robots")}
+      <View
+        style={[
+          styles.siteCard,
+          {
+            backgroundColor: colors.backgroundSecondary,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View
           style={[
-            styles.actionButton,
-            {
-              backgroundColor: colors.backgroundTertiary,
-              borderColor: colors.border,
-            },
+            styles.siteIconWrap,
+            { backgroundColor: colors.backgroundTertiary },
           ]}
         >
-          <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>
-            All Robot Data
+          <Ionicons name="business-outline" size={18} color={colors.primary} />
+        </View>
+        <View style={styles.siteCardText}>
+          <Text style={[styles.siteTitle, { color: colors.textPrimary }]}>
+            {siteTitle}
           </Text>
-        </Pressable>
-        <Pressable
-          onPress={handleStopAll}
-          style={[
-            styles.actionButton,
-            {
-              backgroundColor: colors.backgroundTertiary,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>
-            Stop All
+          <Text style={[styles.siteMeta, { color: colors.textMuted }]}>
+            Site ID · {siteId}
           </Text>
-        </Pressable>
+        </View>
       </View>
+
+      <Pressable
+        onPress={() => navigation.navigate("Robots")}
+        style={[
+          styles.secondaryAction,
+          {
+            backgroundColor: colors.backgroundTertiary,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Ionicons name="battery-half-outline" size={14} color={colors.primary} />
+        <Text style={[styles.secondaryActionText, { color: colors.textPrimary }]}>
+          View all robot battery data
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+      </Pressable>
 
       <SummaryStrip
         online={summary.online}
@@ -384,7 +533,7 @@ export function BlockwiseScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search Block..."
+            placeholder="Search blocks..."
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.textPrimary }]}
             autoCapitalize="none"
@@ -410,11 +559,24 @@ export function BlockwiseScreen() {
             },
           ]}
         >
-          <Text style={[styles.refreshButtonText, { color: colors.textPrimary }]}>
-            Refresh
-          </Text>
+          <Ionicons name="refresh-outline" size={16} color={colors.textPrimary} />
         </Pressable>
       </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Blocks
+        </Text>
+        <Text style={[styles.sectionCount, { color: colors.textMuted }]}>
+          {filteredBlocks.length}
+        </Text>
+      </View>
+
+      {!canSendCommands ? (
+        <Text style={[styles.permissionHint, { color: colors.textMuted }]}>
+          Robot command access is not enabled for your account.
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -465,7 +627,14 @@ export function BlockwiseScreen() {
           data={filteredBlocks}
           keyExtractor={(item) => item.block_name}
           renderItem={({ item }) => (
-            <BlockCard block={item} onManage={handleManage} />
+            <BlockCard
+              block={item}
+              siteId={siteId}
+              canSendCommands={canSendCommands}
+              bulkLoading={bulkLoading}
+              onBulkCommand={handleBulkCommand}
+              onRobotPress={handleRobotPress}
+            />
           )}
           ListHeaderComponent={listHeader}
           contentContainerStyle={styles.listContent}
@@ -513,28 +682,50 @@ const styles = StyleSheet.create({
   headerContent: {
     gap: spacing.sm,
     paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  siteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  siteIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  siteCardText: {
+    flex: 1,
+    gap: 2,
   },
   siteTitle: {
     ...typography.label,
-    fontSize: 13,
-    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "700",
     lineHeight: 18,
   },
-  actionRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-  actionButtonText: {
-    ...typography.label,
+  siteMeta: {
+    ...typography.caption,
     fontSize: 11,
+  },
+  secondaryAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  secondaryActionText: {
+    ...typography.label,
+    fontSize: 12,
+    flex: 1,
   },
   summaryStrip: {
     flexDirection: "row",
@@ -589,29 +780,82 @@ const styles = StyleSheet.create({
   refreshButton: {
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minHeight: 36,
+    width: 36,
+    height: 36,
+    alignItems: "center",
     justifyContent: "center",
   },
-  refreshButtonText: {
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xs,
+  },
+  sectionTitle: {
     ...typography.label,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  sectionCount: {
+    ...typography.caption,
+    fontSize: 12,
+  },
+  permissionHint: {
+    ...typography.caption,
     fontSize: 11,
+    textAlign: "center",
   },
   blockCard: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    borderRadius: radius.lg,
+    padding: spacing.md,
     gap: spacing.sm,
+  },
+  blockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  blockTitleWrap: {
+    flex: 1,
+    gap: 2,
   },
   blockTitle: {
     ...typography.label,
-    fontSize: 13,
-    textAlign: "center",
+    fontSize: 15,
+    fontWeight: "700",
   },
-  blockStatsRow: {
+  blockSubtitle: {
+    ...typography.caption,
+    fontSize: 11,
+  },
+  onlinePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  onlinePillText: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  blockStatsPanel: {
     flexDirection: "row",
     justifyContent: "space-between",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   blockStatCell: {
     flex: 1,
@@ -625,10 +869,11 @@ const styles = StyleSheet.create({
   blockStatValue: {
     ...typography.label,
     fontSize: 14,
+    fontWeight: "700",
   },
   robotGrid: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     flexWrap: "wrap",
     gap: spacing.xs,
   },
@@ -637,16 +882,16 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
     paddingTop: spacing.xs,
-    paddingBottom: 4,
-    paddingHorizontal: 2,
+    paddingBottom: 3,
+    paddingHorizontal: 0,
     alignItems: "center",
-    minHeight: 42,
+    minHeight: 40,
     justifyContent: "center",
   },
   robotTileDivider: {
     width: "72%",
     height: StyleSheet.hairlineWidth,
-    marginVertical: 3,
+    marginVertical: 2,
   },
   robotTileId: {
     ...typography.caption,
@@ -660,19 +905,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     textAlign: "center",
   },
-  manageButton: {
-    alignSelf: "center",
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    minWidth: 120,
-    alignItems: "center",
+  commandDivider: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: spacing.xs,
   },
-  manageButtonText: {
-    ...typography.label,
-    fontSize: 11,
-    letterSpacing: 0.4,
+  commandRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
   },
   messageCard: {
     flexDirection: "row",

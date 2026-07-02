@@ -8,6 +8,7 @@ import { spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import { Badge } from "../ui/Badge";
 import { Logo } from "../ui/Logo";
+import { useSearch } from "../../context/SearchContext";
 
 type Props = {
   title: string;
@@ -15,6 +16,7 @@ type Props = {
   showMenu?: boolean;
   showLogo?: boolean;
   showThemeToggle?: boolean;
+  showSearch?: boolean;
   notificationCount?: number;
   onThemeToggle?: () => void;
   leftAction?: React.ReactNode;
@@ -26,6 +28,7 @@ export function Navbar({
   showMenu = true,
   showLogo = true,
   showThemeToggle = true,
+  showSearch = true,
   notificationCount = 0,
   onThemeToggle,
   leftAction,
@@ -33,6 +36,7 @@ export function Navbar({
   const { colors, isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { openSearch } = useSearch();
 
   const handleThemeToggle = onThemeToggle ?? toggleTheme;
 
@@ -85,6 +89,23 @@ export function Navbar({
         </View>
 
         <View style={styles.actions}>
+          {showSearch ? (
+            <Pressable
+              onPress={openSearch}
+              style={[
+                styles.iconButton,
+                { backgroundColor: colors.backgroundTertiary },
+              ]}
+              hitSlop={6}
+            >
+              <Ionicons
+                name="search-outline"
+                size={16}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          ) : null}
+
           <Pressable
             style={[
               styles.iconButton,

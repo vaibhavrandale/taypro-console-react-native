@@ -13,6 +13,10 @@ import { MainTabs } from './MainTabs';
 import { SitesStack } from './SitesStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
 import { BlockwiseScreen } from '../screens/BlockwiseScreen';
+import { BlockManagementScreen } from '../screens/BlockManagementScreen';
+import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
+import { GatewayDetailScreen } from '../screens/GatewayDetailScreen';
+import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 
 const AuthStack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -21,7 +25,8 @@ function MainDrawer() {
   const { colors } = useTheme();
 
   return (
-    <Drawer.Navigator
+    <>
+      <Drawer.Navigator
       drawerContent={(props) => <Sidebar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -38,6 +43,21 @@ function MainDrawer() {
       <Drawer.Screen
         name="Blockwise"
         component={BlockwiseScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="BlockManagement"
+        component={BlockManagementScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="RobotOperating"
+        component={RobotOperatingScreen}
+        options={{ drawerItemStyle: { display: 'none' } }}
+      />
+      <Drawer.Screen
+        name="GatewayDetail"
+        component={GatewayDetailScreen}
         options={{ drawerItemStyle: { display: 'none' } }}
       />
       <Drawer.Screen name="Sites" component={SitesStack} />
@@ -76,6 +96,8 @@ function MainDrawer() {
         )}
       </Drawer.Screen>
     </Drawer.Navigator>
+      <GlobalSearchModal />
+    </>
   );
 }
 
