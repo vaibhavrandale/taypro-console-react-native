@@ -1,6 +1,10 @@
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -17,6 +21,7 @@ import { BlockManagementScreen } from '../screens/BlockManagementScreen';
 import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
 import { GatewayDetailScreen } from '../screens/GatewayDetailScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
+import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
 
 const AuthStack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -97,13 +102,30 @@ function MainDrawer() {
       </Drawer.Screen>
     </Drawer.Navigator>
       <GlobalSearchModal />
+      <CustomNotificationModal />
     </>
   );
 }
 
 function RootNavigator() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const { colors } = useTheme();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const { colors, isDark } = useTheme();
+
+  const navigationTheme = React.useMemo(
+    () => ({
+      ...(isDark ? DarkTheme : DefaultTheme),
+      colors: {
+        ...(isDark ? DarkTheme.colors : DefaultTheme.colors),
+        primary: colors.primary,
+        background: colors.background,
+        card: colors.backgroundSecondary,
+        text: colors.textPrimary,
+        border: colors.border,
+        notification: colors.danger,
+      },
+    }),
+    [isDark, colors],
+  );
 
   if (isLoading) {
     return (
@@ -114,9 +136,9 @@ function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       {isAuthenticated ? (
-        <MainDrawer />
+        <MainDrawer key={user?._id ?? "authenticated"} />
       ) : (
         <AuthStack.Navigator screenOptions={{ headerShown: false }}>
           <AuthStack.Screen name="Login" component={LoginScreen} />

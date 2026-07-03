@@ -19,6 +19,7 @@ type Props = {
   loading?: boolean;
   disabled?: boolean;
   tone?: 'default' | 'danger';
+  size?: 'sm' | 'xs';
   style?: StyleProp<ViewStyle>;
 };
 
@@ -29,11 +30,13 @@ export function CompactCommandButton({
   loading = false,
   disabled = false,
   tone = 'default',
+  size = 'sm',
   style,
 }: Props) {
   const { colors } = useTheme();
   const isDisabled = disabled || loading;
   const accentColor = tone === 'danger' ? colors.danger : colors.primary;
+  const isXs = size === 'xs';
 
   return (
     <Pressable
@@ -41,6 +44,7 @@ export function CompactCommandButton({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.base,
+        isXs && styles.baseXs,
         {
           borderColor: accentColor,
           backgroundColor: colors.backgroundTertiary,
@@ -54,8 +58,15 @@ export function CompactCommandButton({
         <ActivityIndicator size="small" color={accentColor} />
       ) : (
         <>
-          <Ionicons name={icon} size={15} color={accentColor} />
-          <Text style={[styles.label, { color: accentColor }]} numberOfLines={1}>
+          <Ionicons name={icon} size={isXs ? 12 : 15} color={accentColor} />
+          <Text
+            style={[
+              styles.label,
+              isXs && styles.labelXs,
+              { color: accentColor },
+            ]}
+            numberOfLines={1}
+          >
             {label}
           </Text>
         </>
@@ -76,12 +87,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
     gap: 2,
   },
+  baseXs: {
+    minHeight: 32,
+    paddingVertical: 4,
+    gap: 1,
+  },
   label: {
     ...typography.caption,
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.2,
     textTransform: 'uppercase',
+  },
+  labelXs: {
+    fontSize: 8,
+    letterSpacing: 0.1,
   },
   disabled: {
     opacity: 0.55,

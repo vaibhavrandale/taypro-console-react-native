@@ -1,6 +1,6 @@
 export type AssignedSite = {
   site_id: string;
-  site_name?: string;
+  siteName?: string;
   assignedBy?: string;
   assignedAt?: string;
 };
@@ -16,8 +16,12 @@ export type User = {
   profile_image?: string;
   designation?: string;
   employee_id?: string;
+  salutation?: string;
+  createdAt?: string;
+  last_login?: string;
   robot_command_access?: boolean;
   assigned_sites?: AssignedSite[];
+  user_images?: string[];
 };
 
 export type AuthState = {

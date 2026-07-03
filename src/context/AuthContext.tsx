@@ -10,9 +10,13 @@ import * as SecureStore from "expo-secure-store";
 import { API_BASE_URL } from "../config/api";
 import { User } from "../types/auth";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
-import { clearAuthToken, setAuthToken } from "../api/client";
-
-const USER_STORAGE_KEY = "taypro_user";
+import { clearAuthToken, getAuthToken, setAuthToken, apiFetch } from "../api/client";
+import { fetchUserById } from "../api/users";
+import { getJwtUserId } from "../utils/jwt";
+import {
+  USER_STORAGE_KEY,
+  clearAllSessionData,
+} from "../utils/sessionStorage";
 
 type AuthContextValue = {
   user: User | null;
@@ -20,6 +24,8 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
+  updateUser: (user: User) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -42,19 +48,58 @@ function extractAuthPayload(payload: unknown): { user: User | null; token: strin
   return { user, token };
 }
 
+function assertTokenMatchesUser(token: string, userId: string): void {
+  const tokenUserId = getJwtUserId(token);
+  if (tokenUserId && tokenUserId !== userId) {
+    throw new Error(
+      `Auth token user (${tokenUserId}) does not match profile (${userId})`,
+    );
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    SecureStore.getItemAsync(USER_STORAGE_KEY)
-      .then((stored) => {
-        if (stored) {
-          setUser(JSON.parse(stored));
-        }
-      })
-      .finally(() => setIsLoading(false));
+  const clearStoredSession = useCallback(async () => {
+    setUser(null);
+    await clearAllSessionData();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [stored, token] = await Promise.all([
+          SecureStore.getItemAsync(USER_STORAGE_KEY),
+          getAuthToken(),
+        ]);
+
+        if (!stored) {
+          if (token) await clearAuthToken();
+          return;
+        }
+
+        const parsedUser = JSON.parse(stored) as User;
+
+        if (!token || !parsedUser._id) {
+          await clearStoredSession();
+          return;
+        }
+
+        const tokenUserId = getJwtUserId(token);
+        if (tokenUserId && tokenUserId !== parsedUser._id) {
+          await clearStoredSession();
+          return;
+        }
+
+        setUser(parsedUser);
+      } catch {
+        await clearStoredSession();
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [clearStoredSession]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     let response: Response;
@@ -68,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
         body: JSON.stringify({ email, password }),
         timeoutMs: 30000,
+        credentials: "omit",
       });
     } catch (err) {
       const message =
@@ -107,9 +153,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Login succeeded but no user data was returned");
     }
 
-    if (token) {
-      await setAuthToken(token);
+    await clearAuthToken();
+
+    if (!token) {
+      throw new Error("Login succeeded but no auth token was returned");
     }
+
+    assertTokenMatchesUser(token, loggedInUser._id);
+
+    await setAuthToken(token);
 
     setUser(loggedInUser);
     await SecureStore.setItemAsync(
@@ -120,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await fetchWithTimeout(`${API_BASE_URL}/auth/sign-out`, {
+      await apiFetch("/auth/sign-out", {
         method: "POST",
         timeoutMs: 10000,
       });
@@ -129,9 +181,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setUser(null);
-    await SecureStore.deleteItemAsync(USER_STORAGE_KEY);
-    await clearAuthToken();
+    await clearAllSessionData();
   }, []);
+
+  const updateUser = useCallback(async (next: User) => {
+    setUser(next);
+    await SecureStore.setItemAsync(USER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const stored = await SecureStore.getItemAsync(USER_STORAGE_KEY);
+    if (!stored) return null;
+
+    const current = JSON.parse(stored) as User;
+    if (!current._id) return null;
+
+    const fresh = await fetchUserById(current._id);
+    const merged: User = { ...current, ...fresh };
+    await updateUser(merged);
+    return merged;
+  }, [updateUser]);
 
   const value = useMemo(
     () => ({
@@ -140,8 +209,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       signIn,
       signOut,
+      refreshUser,
+      updateUser,
     }),
-    [user, isLoading, signIn, signOut],
+    [user, isLoading, signIn, signOut, refreshUser, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

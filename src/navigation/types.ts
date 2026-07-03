@@ -1,6 +1,11 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { SitesStackParamList } from './SitesStack';
 
+export type AttendanceStackParamList = {
+  AttendanceHome: undefined;
+  AttendanceHistory: undefined;
+};
+
 export type DrawerParamList = {
   MainTabs: undefined;
   Robots: undefined;

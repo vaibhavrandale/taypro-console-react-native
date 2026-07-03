@@ -12,7 +12,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "in.taypro.console"
+      "bundleIdentifier": "in.taypro.console",
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": true
+      }
     },
     "android": {
       "package": "in.taypro.console",
@@ -20,7 +23,11 @@
         "foregroundImage": "./assets/favicon.png",
         "backgroundColor": "#0B0B0F"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "statusBar": {
+        "barStyle": "light-content",
+        "backgroundColor": "#1A2547"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -35,7 +42,29 @@
           "backgroundColor": "#0B0B0F"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Nectyr to access your camera to capture profile photos and attendance."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Nectyr to use your location to verify you are at the site for punch in/out."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/favicon.png",
+          "color": "#00C9A7",
+          "androidMode": "default",
+          "androidCollapsedTitle": "Nectyr alerts"
+        }
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {

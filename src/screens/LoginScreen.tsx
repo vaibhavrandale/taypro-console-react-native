@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { StatusBar } from "expo-status-bar";
 import { Button, Input, Logo } from "../components/ui";
 import { Screen } from "../components/layout";
 import { API_BASE_URL } from "../config/api";
@@ -69,8 +68,6 @@ export function LoginScreen() {
 
   return (
     <Screen scroll={false} padded={false}>
-      <StatusBar style={isDark ? "light" : "dark"} />
-
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}

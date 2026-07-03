@@ -9,6 +9,7 @@ import { typography } from "../../theme/typography";
 import { Badge } from "../ui/Badge";
 import { Logo } from "../ui/Logo";
 import { useSearch } from "../../context/SearchContext";
+import { useNotification } from "../../context/NotificationContext";
 
 type Props = {
   title: string;
@@ -17,8 +18,10 @@ type Props = {
   showLogo?: boolean;
   showThemeToggle?: boolean;
   showSearch?: boolean;
+  showNotifications?: boolean;
   notificationCount?: number;
   onThemeToggle?: () => void;
+  onNotificationsPress?: () => void;
   leftAction?: React.ReactNode;
 };
 
@@ -29,28 +32,33 @@ export function Navbar({
   showLogo = true,
   showThemeToggle = true,
   showSearch = true,
-  notificationCount = 0,
+  showNotifications = true,
+  notificationCount,
   onThemeToggle,
+  onNotificationsPress,
   leftAction,
 }: Props) {
   const { colors, isDark, toggleTheme } = useTheme();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { openSearch } = useSearch();
+  const { unreadCount, openNotification } = useNotification();
 
   const handleThemeToggle = onThemeToggle ?? toggleTheme;
+  const badgeCount = notificationCount ?? unreadCount;
+  const handleNotificationsPress = onNotificationsPress ?? openNotification;
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: colors.navbar,
-          borderBottomColor: colors.border,
-          paddingTop: insets.top + spacing.xs,
-        },
-      ]}
-    >
+    <View style={{ backgroundColor: colors.navbar }}>
+      <View style={{ height: insets.top, backgroundColor: colors.navbar }} />
+      <View
+        style={[
+          styles.container,
+          {
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
       <View style={styles.row}>
         {leftAction ? (
           leftAction
@@ -106,30 +114,31 @@ export function Navbar({
             </Pressable>
           ) : null}
 
-          <Pressable
-            style={[
-              styles.iconButton,
-              { backgroundColor: colors.backgroundTertiary },
-            ]}
-            hitSlop={6}
-          >
-            <Ionicons
-              name="notifications-outline"
-              size={16}
-              color={colors.textPrimary}
-            />
-            {notificationCount > 0 ? (
-              <View style={styles.badgeWrap}>
-                <Badge
-                  label={
-                    notificationCount > 9 ? "9+" : String(notificationCount)
-                  }
-                  variant="error"
-                  size="sm"
-                />
-              </View>
-            ) : null}
-          </Pressable>
+          {showNotifications ? (
+            <Pressable
+              onPress={handleNotificationsPress}
+              style={[
+                styles.iconButton,
+                { backgroundColor: colors.backgroundTertiary },
+              ]}
+              hitSlop={6}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={16}
+                color={colors.textPrimary}
+              />
+              {badgeCount > 0 ? (
+                <View style={styles.badgeWrap}>
+                  <Badge
+                    label={badgeCount > 9 ? "9+" : String(badgeCount)}
+                    variant="error"
+                    size="sm"
+                  />
+                </View>
+              ) : null}
+            </Pressable>
+          ) : null}
 
           {showThemeToggle ? (
             <Pressable
@@ -149,6 +158,7 @@ export function Navbar({
           ) : null}
         </View>
       </View>
+      </View>
     </View>
   );
 }
@@ -156,6 +166,7 @@ export function Navbar({
 const styles = StyleSheet.create({
   container: {
     borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.md,
   },

@@ -61,6 +61,7 @@ export function SearchProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<GatewaysAndRobotsData>(emptyData);
 
   const clearSearchData = useCallback(async () => {
+    setVisible(false);
     await clearSearchCache();
     setData(emptyData);
     setError('');

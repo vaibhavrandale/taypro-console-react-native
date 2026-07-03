@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useSearch } from '../../context/SearchContext';
+import { useStatusBarOverlay } from '../../context/StatusBarOverlayContext';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -132,6 +133,8 @@ export function GlobalSearchModal() {
   }, [query, searchGateways]);
 
   const hasResults = robotResults.length > 0 || gatewayResults.length > 0;
+
+  useStatusBarOverlay(visible);
 
   const handleRobotSelect = (robot: SearchRobot) => {
     const { robot_no, site_id, block } = robot;
@@ -267,7 +270,6 @@ export function GlobalSearchModal() {
       animationType={Platform.OS === 'android' ? 'none' : 'fade'}
       onRequestClose={handleClose}
       onShow={focusSearchInput}
-      statusBarTranslucent
     >
       <KeyboardAvoidingView
         style={[

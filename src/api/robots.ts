@@ -102,10 +102,8 @@ function normalizeCommandResponse(payload: unknown): SendMqttDownlinkResponse {
   if (!isRecord(payload)) return {};
 
   return {
-    success:
-      typeof payload.success === "boolean" ? payload.success : undefined,
-    message:
-      typeof payload.message === "string" ? payload.message : undefined,
+    success: typeof payload.success === "boolean" ? payload.success : undefined,
+    message: typeof payload.message === "string" ? payload.message : undefined,
     data: payload.data,
   };
 }
@@ -115,12 +113,12 @@ export async function fetchGatewaysAndRobots(): Promise<GatewaysAndRobotsData> {
   const payload = await parseJson(response);
   const normalized = normalizeGatewaysAndRobots(payload);
 
-  if (__DEV__) {
-    console.log("[search] gateways-and-robots", {
-      robots: normalized.robots.length,
-      gateways: normalized.gateways.length,
-    });
-  }
+  // if (__DEV__) {
+  //   console.log("[search] gateways-and-robots", {
+  //     robots: normalized.robots.length,
+  //     gateways: normalized.gateways.length,
+  //   });
+  // }
 
   return normalized;
 }
@@ -151,7 +149,12 @@ export async function sendMqttDownlink(
     "deveui" | "lora_no" | "robot_no" | "site_id"
   >,
 ) {
-  if (!robot.deveui || robot.lora_no == null || !robot.robot_no || !robot.site_id) {
+  if (
+    !robot.deveui ||
+    robot.lora_no == null ||
+    !robot.robot_no ||
+    !robot.site_id
+  ) {
     throw new Error("Missing robot command details");
   }
 

@@ -34,5 +34,7 @@ export async function apiFetch(
   return fetchWithTimeout(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
+    // Avoid stale server session cookies overriding the Bearer JWT.
+    credentials: 'omit',
   });
 }

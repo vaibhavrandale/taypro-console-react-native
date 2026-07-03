@@ -12,6 +12,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import { Navbar, Screen } from "../components/layout";
+import { RobotEventAndFrames } from "../components/robots/RobotEventAndFrames";
+import { RobotDebugLogs } from "../components/robots/RobotDebugLogs";
+import { RobotRawCleaningLogs } from "../components/robots/RobotRawCleaningLogs";
 import { Badge, Button, CompactCommandButton } from "../components/ui";
 import { fetchRobotByRobotNo, sendMqttDownlink } from "../api/robots";
 import { useAuth } from "../context/AuthContext";
@@ -26,6 +29,79 @@ import type { DrawerParamList } from "../navigation/types";
 
 type Route = RouteProp<DrawerParamList, "RobotOperating">;
 type Navigation = DrawerNavigationProp<DrawerParamList, "RobotOperating">;
+
+type OperatingTab = "overview" | "frames" | "cleaning-logs" | "debug-logs";
+
+function TabBar({
+  activeTab,
+  onChange,
+}: {
+  activeTab: OperatingTab;
+  onChange: (tab: OperatingTab) => void;
+}) {
+  const { colors } = useTheme();
+  const tabs: {
+    id: OperatingTab;
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+  }[] = [
+    { id: "overview", label: "Robot Info", icon: "speedometer-outline" },
+    { id: "frames", label: "Frames", icon: "pulse-outline" },
+    {
+      id: "cleaning-logs",
+      label: "Cleaning",
+      icon: "document-text-outline",
+    },
+    {
+      id: "debug-logs",
+      label: "Debug",
+      icon: "bug-outline",
+    },
+  ];
+
+  return (
+    <View
+      style={[
+        styles.tabBar,
+        {
+          backgroundColor: colors.backgroundSecondary,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      {tabs.map((tab) => {
+        const selected = activeTab === tab.id;
+        return (
+          <Pressable
+            key={tab.id}
+            onPress={() => onChange(tab.id)}
+            style={[
+              styles.tabButton,
+              selected && {
+                borderBottomColor: colors.primary,
+                backgroundColor: colors.backgroundTertiary,
+              },
+            ]}
+          >
+            <Ionicons
+              name={tab.icon}
+              size={14}
+              color={selected ? colors.primary : colors.textMuted}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                { color: selected ? colors.primary : colors.textMuted },
+              ]}
+            >
+              {tab.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
 
 function InfoCard({
   title,
@@ -136,9 +212,10 @@ export function RobotOperatingScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [commandLoading, setCommandLoading] = useState<
-    RobotCommand | null
-  >(null);
+  const [commandLoading, setCommandLoading] = useState<RobotCommand | null>(
+    null,
+  );
+  const [activeTab, setActiveTab] = useState<OperatingTab>("overview");
 
   const canSendCommands = user?.robot_command_access !== false;
 
@@ -278,7 +355,9 @@ export function RobotOperatingScreen() {
         <Text style={[styles.breadcrumbSep, { color: colors.textMuted }]}>
           /
         </Text>
-        <Text style={[styles.breadcrumbCurrent, { color: colors.textSecondary }]}>
+        <Text
+          style={[styles.breadcrumbCurrent, { color: colors.textSecondary }]}
+        >
           {block}
         </Text>
       </View>
@@ -294,6 +373,12 @@ export function RobotOperatingScreen() {
           disabled={refreshing || loading}
         />
       </View>
+
+      {!loading && !error ? (
+        <View style={styles.tabBarWrap}>
+          <TabBar activeTab={activeTab} onChange={setActiveTab} />
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.centerState}>
@@ -317,172 +402,164 @@ export function RobotOperatingScreen() {
         <Screen
           scroll
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void loadRobot(true)}
-              tintColor={colors.primary}
-              colors={[colors.primary]}
-            />
+            activeTab === "overview" ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => void loadRobot(true)}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            ) : undefined
           }
         >
-          <View style={styles.cards}>
-            <InfoCard colors={colors}>
-              <View style={styles.cardHeaderRow}>
-                <Text style={[styles.robotNo, { color: colors.textPrimary }]}>
-                  {robot?.robot_no ?? robotNo}
-                </Text>
-                <Badge
-                  label={online ? "Online" : "Offline"}
-                  variant={online ? "success" : "error"}
-                />
-              </View>
-
-              <View style={styles.fieldGrid}>
-                <View style={styles.fieldWide}>
-                  <Text
-                    style={[styles.fieldLabel, { color: colors.textMuted }]}
-                  >
-                    Battery
+          {activeTab === "overview" ? (
+            <View style={styles.cards}>
+              <InfoCard colors={colors}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={[styles.robotNo, { color: colors.textPrimary }]}>
+                    {robot?.robot_no ?? robotNo}
                   </Text>
-                  <BatteryBar
-                    percent={batteryPercent}
-                    online={online}
+                  <Badge
+                    label={online ? "Online" : "Offline"}
+                    variant={online ? "success" : "error"}
+                  />
+                </View>
+
+                <View style={styles.fieldGrid}>
+                  <View style={styles.fieldWide}>
+                    <Text
+                      style={[styles.fieldLabel, { color: colors.textMuted }]}
+                    >
+                      Battery
+                    </Text>
+                    <BatteryBar
+                      percent={batteryPercent}
+                      online={online}
+                      colors={colors}
+                    />
+                  </View>
+                  <Field
+                    label="DevEUI"
+                    value={robot?.deveui ?? "—"}
+                    colors={colors}
+                    wide
+                  />
+                  <Field
+                    label="LoRa No"
+                    value={robot?.lora_no != null ? robot.lora_no : "—"}
+                    colors={colors}
+                  />
+                  <Field label="" value={""} colors={colors} />
+                  <Field
+                    label="Firmware"
+                    value={firmwareVersion}
+                    colors={colors}
+                  />
+                  <Field
+                    label="PCB Version"
+                    value={pcbVersion}
                     colors={colors}
                   />
                 </View>
+              </InfoCard>
+
+              <InfoCard title="" colors={colors}>
                 <Field
-                  label="DevEUI"
-                  value={robot?.deveui ?? "—"}
+                  label="Last Update (IST)"
+                  value={formatDateTimeIST(robot?.last_uplink)}
                   colors={colors}
                   wide
                 />
                 <Field
-                  label="LoRa No"
-                  value={robot?.lora_no != null ? robot.lora_no : "—"}
+                  label="Last Status"
+                  value={robot?.last_status ?? "—"}
                   colors={colors}
+                  wide
                 />
-                <Field
-                  label="LoRa State"
-                  value={online ? "Online" : "Offline"}
-                  colors={colors}
-                />
-                <Field
-                  label="Firmware"
-                  value={firmwareVersion}
-                  colors={colors}
-                />
-                <Field label="PCB Version" value={pcbVersion} colors={colors} />
-              </View>
-            </InfoCard>
-
-            <InfoCard title="Last Activity" colors={colors}>
-              <Field
-                label="Last Update (IST)"
-                value={formatDateTimeIST(robot?.last_uplink)}
-                colors={colors}
-                wide
-              />
-              <View style={styles.spacer} />
-              <Field
-                label="Last Status"
-                value={robot?.last_status ?? "—"}
-                colors={colors}
-                wide
-              />
-            </InfoCard>
-
-            <InfoCard title="Motor Speeds" colors={colors}>
-              <View style={styles.speedRow}>
-                <View
-                  style={[
-                    styles.speedBox,
-                    {
-                      backgroundColor: colors.backgroundTertiary,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="disc-outline"
-                    size={18}
-                    color={colors.primary}
+                <View style={styles.fieldGrid}>
+                  <Field
+                    label="Wheel Speed"
+                    value={
+                      robot?.wheel_motor_speed != null
+                        ? robot.wheel_motor_speed
+                        : "—"
+                    }
+                    colors={colors}
                   />
-                  <Text
-                    style={[styles.speedLabel, { color: colors.textMuted }]}
-                  >
-                    Wheel
-                  </Text>
-                  <Text
-                    style={[styles.speedValue, { color: colors.textPrimary }]}
-                  >
-                    {robot?.wheel_motor_speed != null
-                      ? robot.wheel_motor_speed
-                      : "—"}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.speedBox,
-                    {
-                      backgroundColor: colors.backgroundTertiary,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="brush-outline"
-                    size={18}
-                    color={colors.primary}
+                  <Field
+                    label="Brush Speed"
+                    value={
+                      robot?.brush_motor_speed != null
+                        ? robot.brush_motor_speed
+                        : "—"
+                    }
+                    colors={colors}
                   />
-                  <Text
-                    style={[styles.speedLabel, { color: colors.textMuted }]}
-                  >
-                    Brush
-                  </Text>
-                  <Text
-                    style={[styles.speedValue, { color: colors.textPrimary }]}
-                  >
-                    {robot?.brush_motor_speed != null
-                      ? robot.brush_motor_speed
-                      : "—"}
-                  </Text>
                 </View>
-              </View>
-            </InfoCard>
+              </InfoCard>
 
-            <InfoCard title="Commands" colors={colors}>
-              <View style={styles.commandRow}>
-                <CompactCommandButton
-                  label="Start"
-                  icon="play"
-                  onPress={() => handleCommand("start")}
-                  loading={commandLoading === "start"}
-                  disabled={!canSendCommands || commandLoading !== null}
-                />
-                <CompactCommandButton
-                  label="Stop"
-                  icon="stop"
-                  tone="danger"
-                  onPress={() => handleCommand("stop")}
-                  loading={commandLoading === "stop"}
-                  disabled={!canSendCommands || commandLoading !== null}
-                />
-                <CompactCommandButton
-                  label="Return"
-                  icon="return-down-back"
-                  onPress={() => handleCommand("return")}
-                  loading={commandLoading === "return"}
-                  disabled={!canSendCommands || commandLoading !== null}
-                />
-              </View>
-              {!canSendCommands ? (
-                <Text style={[styles.commandHint, { color: colors.textMuted }]}>
-                  Robot command access is not enabled for your account.
+              <InfoCard title="Commands" colors={colors}>
+                <View style={styles.commandRow}>
+                  <CompactCommandButton
+                    label="Start"
+                    icon="play"
+                    size="xs"
+                    onPress={() => handleCommand("start")}
+                    loading={commandLoading === "start"}
+                    disabled={!canSendCommands || commandLoading !== null}
+                  />
+                  <CompactCommandButton
+                    label="Stop"
+                    icon="stop"
+                    tone="danger"
+                    size="xs"
+                    onPress={() => handleCommand("stop")}
+                    loading={commandLoading === "stop"}
+                    disabled={!canSendCommands || commandLoading !== null}
+                  />
+                  <CompactCommandButton
+                    label="Return"
+                    icon="return-down-back"
+                    size="xs"
+                    onPress={() => handleCommand("return")}
+                    loading={commandLoading === "return"}
+                    disabled={!canSendCommands || commandLoading !== null}
+                  />
+                </View>
+                {!canSendCommands ? (
+                  <Text
+                    style={[styles.commandHint, { color: colors.textMuted }]}
+                  >
+                    Robot command access is not enabled for your account.
+                  </Text>
+                ) : null}
+              </InfoCard>
+            </View>
+          ) : activeTab === "frames" ? (
+            robot?.deveui ? (
+              <RobotEventAndFrames
+                robotNo={robotNo}
+                deveui={robot.deveui}
+                active={activeTab === "frames"}
+              />
+            ) : (
+              <View style={styles.centerState}>
+                <Text style={[styles.stateText, { color: colors.textMuted }]}>
+                  DevEUI is missing for this robot.
                 </Text>
-              ) : null}
-            </InfoCard>
-          </View>
+              </View>
+            )
+          ) : activeTab === "cleaning-logs" ? (
+            <RobotRawCleaningLogs
+              robotNo={robotNo}
+              active={activeTab === "cleaning-logs"}
+            />
+          ) : (
+            <RobotDebugLogs
+              robotNo={robotNo}
+              active={activeTab === "debug-logs"}
+            />
+          )}
         </Screen>
       )}
     </View>
@@ -504,7 +581,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
-    marginTop: spacing.sm,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
     flexWrap: "wrap",
@@ -531,6 +608,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
     alignItems: "flex-end",
+  },
+  tabBarWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  tabBar: {
+    flexDirection: "row",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 2,
+    borderBottomColor: "transparent",
+  },
+  tabLabel: {
+    ...typography.label,
+    fontSize: 11,
+    fontWeight: "600",
   },
   centerState: {
     flex: 1,
@@ -600,8 +702,12 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 13,
   },
-  spacer: {
-    height: spacing.xs,
+  commandRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    maxWidth: 280,
+    alignSelf: "center",
+    width: "100%",
   },
   batteryWrap: {
     flexDirection: "row",
@@ -624,35 +730,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     minWidth: 36,
     textAlign: "right",
-  },
-  speedRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  speedBox: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-  },
-  speedLabel: {
-    ...typography.caption,
-    fontSize: 10,
-    textTransform: "uppercase",
-    letterSpacing: 0.3,
-  },
-  speedValue: {
-    ...typography.h3,
-    fontSize: 22,
-    fontWeight: "700",
-  },
-  commandRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
   },
   commandHint: {
     ...typography.caption,
