@@ -5,8 +5,13 @@ const RADIUS_METERS = 1000;
 export function buildGatewayLeafletHtml(
   gateways: GatewayMapPoint[],
   _isDark: boolean,
+  userLocation: { latitude: number; longitude: number } | null = null,
+  focusUser = false,
 ) {
   const payload = JSON.stringify(gateways).replace(/</g, "\\u003c");
+  const userPayload = userLocation
+    ? JSON.stringify(userLocation).replace(/</g, "\\u003c")
+    : "null";
 
   return `<!DOCTYPE html>
 <html>
@@ -27,9 +32,11 @@ export function buildGatewayLeafletHtml(
   <div id="map"></div>
   <script>
     const gateways = ${payload};
+    const user = ${userPayload};
+    const focusUser = ${focusUser ? "true" : "false"};
     const radiusMeters = ${RADIUS_METERS};
 
-    if (!gateways.length) {
+    if (!gateways.length && (!user || user.latitude == null || user.longitude == null)) {
       document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8B9DC3;font-family:sans-serif;font-size:13px;padding:16px;text-align:center;">No gateway coordinates available</div>';
     } else {
       const map = L.map('map', { zoomControl: true, attributionControl: true });
@@ -91,9 +98,25 @@ export function buildGatewayLeafletHtml(
         );
       });
 
-      if (bounds.length === 1) {
+      if (user && user.latitude != null && user.longitude != null) {
+        const userLatLng = [user.latitude, user.longitude];
+        bounds.push(userLatLng);
+        L.circleMarker(userLatLng, {
+          radius: 9,
+          color: '#ffffff',
+          weight: 3,
+          fillColor: '#4F7CFF',
+          fillOpacity: 1,
+        })
+          .addTo(map)
+          .bindPopup('<strong>Your location</strong>');
+      }
+
+      if (focusUser && user && user.latitude != null && user.longitude != null) {
+        map.setView([user.latitude, user.longitude], 16);
+      } else if (bounds.length === 1) {
         map.setView(bounds[0], 14);
-      } else {
+      } else if (bounds.length > 0) {
         map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13 });
       }
     }

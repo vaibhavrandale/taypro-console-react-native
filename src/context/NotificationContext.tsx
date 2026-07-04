@@ -7,12 +7,11 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { AppState } from 'react-native';
 import {
   fetchLatestUnreadNotification,
   markNotificationRead,
 } from '../api/customNotifications';
-import { savePushToken } from '../api/pushToken';
-import { isRemotePushSupported } from '../services/pushNotificationSupport';
 import { useAuth } from './AuthContext';
 import type { CustomNotification } from '../types/customNotification';
 
@@ -25,13 +24,15 @@ type NotificationContextValue = {
   visible: boolean;
   openNotification: () => void;
   closeNotification: () => void;
-  refreshNotification: () => Promise<void>;
+  refreshNotification: (autoOpen?: boolean, silent?: boolean) => Promise<void>;
   submitRead: (feedback?: string) => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(
   null,
 );
+
+const NOTIFICATION_POLL_INTERVAL_MS = 30 * 1000;
 
 export function NotificationProvider({
   children,
@@ -46,22 +47,37 @@ export function NotificationProvider({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
-  const loadLatestRef = useRef<(autoOpen: boolean) => Promise<void>>(async () => {});
+  const lastKnownIdRef = useRef<string | null>(null);
+  const loadLatestRef = useRef<
+    (autoOpen: boolean, silent?: boolean) => Promise<void>
+  >(async () => {});
 
-  const loadLatest = useCallback(async (autoOpen: boolean) => {
+  const loadLatest = useCallback(async (autoOpen: boolean, silent = false) => {
     if (!isAuthenticated) {
       setNotification(null);
       setVisible(false);
+      lastKnownIdRef.current = null;
       return;
     }
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setError('');
 
     try {
       const latest = await fetchLatestUnreadNotification();
+      const isNewAlert =
+        latest != null && latest._id !== lastKnownIdRef.current;
+
+      if (latest) {
+        lastKnownIdRef.current = latest._id;
+      } else {
+        lastKnownIdRef.current = null;
+      }
+
       setNotification(latest);
-      if (autoOpen && latest) {
+      if (autoOpen && latest && isNewAlert) {
         setVisible(true);
       }
       if (!latest) {
@@ -73,7 +89,9 @@ export function NotificationProvider({
         err instanceof Error ? err.message : 'Failed to load notification',
       );
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [isAuthenticated]);
 
@@ -81,62 +99,12 @@ export function NotificationProvider({
     loadLatestRef.current = loadLatest;
   }, [loadLatest]);
 
-  useEffect(() => {
-    if (authLoading || !isAuthenticated) return;
-
-    if (!isRemotePushSupported()) {
-      if (__DEV__) {
-        console.log(
-          '[push] Skipped in Expo Go on Android — use an EAS dev build for remote push.',
-        );
-      }
-      return;
-    }
-
-    let cancelled = false;
-    let removeListeners: (() => void) | undefined;
-
-    (async () => {
-      try {
-        const {
-          registerForPushNotifications,
-          addPushNotificationListeners,
-        } = await import('../services/pushNotifications');
-
-        const token = await registerForPushNotifications();
-        if (!cancelled && token) {
-          await savePushToken(token);
-          if (__DEV__) {
-            console.log('[push] Token registered and saved to backend');
-          }
-        }
-
-        if (!cancelled) {
-          removeListeners = await addPushNotificationListeners({
-            onReceived: () => {
-              void loadLatestRef.current(true);
-            },
-            onResponse: () => {
-              void loadLatestRef.current(true);
-            },
-          });
-        }
-      } catch (err) {
-        if (__DEV__) {
-          console.warn('[push] Registration failed:', err);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      removeListeners?.();
-    };
-  }, [authLoading, isAuthenticated]);
-
-  const refreshNotification = useCallback(async () => {
-    await loadLatest(false);
-  }, [loadLatest]);
+  const refreshNotification = useCallback(
+    async (autoOpen = false, silent = false) => {
+      await loadLatest(autoOpen, silent);
+    },
+    [loadLatest],
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -145,11 +113,35 @@ export function NotificationProvider({
       setNotification(null);
       setVisible(false);
       setError('');
+      lastKnownIdRef.current = null;
       return;
     }
 
     void loadLatest(true);
   }, [authLoading, isAuthenticated, loadLatest]);
+
+  useEffect(() => {
+    if (authLoading || !isAuthenticated) return;
+
+    const poll = () => {
+      if (AppState.currentState === 'active') {
+        void loadLatestRef.current(true, true);
+      }
+    };
+
+    const intervalId = setInterval(poll, NOTIFICATION_POLL_INTERVAL_MS);
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void loadLatestRef.current(true, true);
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      appStateSub.remove();
+    };
+  }, [authLoading, isAuthenticated]);
 
   const openNotification = useCallback(() => {
     if (notification) {

@@ -5,7 +5,7 @@ import { CleaningLogsScreen } from '../screens/CleaningLogsScreen';
 
 export type SitesStackParamList = {
   AssignedSites: undefined;
-  CleaningLogs: {
+  SiteCleaningLogs: {
     siteId: string;
     siteName?: string;
   };
@@ -17,7 +17,7 @@ export function SitesStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="AssignedSites" component={AssignedSitesScreen} />
-      <Stack.Screen name="CleaningLogs" component={CleaningLogsScreen} />
+      <Stack.Screen name="SiteCleaningLogs" component={CleaningLogsScreen} />
     </Stack.Navigator>
   );
 }

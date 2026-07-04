@@ -18,6 +18,7 @@ import * as Location from "expo-location";
 import { Navbar, Screen } from "../components/layout";
 import { PunchCaptureModal } from "../components/attendance/PunchCaptureModal";
 import { buildAttendanceMapHtml } from "../components/attendance/attendanceMapHtml";
+import { MapLocateButton } from "../components/map/MapLocateButton";
 import { Badge, Button } from "../components/ui";
 import { fetchPunchStatus, punchIn, punchOut } from "../api/attendance";
 import {
@@ -25,6 +26,7 @@ import {
   parseSiteCoordinateNumbers,
 } from "../api/siteCoordinates";
 import { useAuth } from "../context/AuthContext";
+import { useLocationTracking } from "../context/LocationTrackingContext";
 import { useTheme } from "../theme";
 import { radius, spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
@@ -48,6 +50,7 @@ type PunchMode = "in" | "out" | null;
 export function AttendanceScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const { refreshTrackingState } = useLocationTracking();
   const navigation =
     useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
   const userId = user?._id ?? "";
@@ -69,6 +72,8 @@ export function AttendanceScreen() {
   const [punchMode, setPunchMode] = useState<PunchMode>(null);
   const [submitting, setSubmitting] = useState(false);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
+  const [focusUser, setFocusUser] = useState(false);
+  const [locating, setLocating] = useState(false);
 
   const siteNumbers = useMemo(
     () => (siteCoords ? parseSiteCoordinateNumbers(siteCoords) : null),
@@ -114,8 +119,9 @@ export function AttendanceScreen() {
           ? { latitude: userLocation.lat, longitude: userLocation.lng }
           : null,
       },
+      focusUser,
     );
-  }, [siteNumbers, userLocation]);
+  }, [siteNumbers, userLocation, focusUser]);
 
   const punchInLocation = punchStatus?.data?.punchin_location;
   const punchOutLocation = punchStatus?.data?.punchout_location;
@@ -161,6 +167,16 @@ export function AttendanceScreen() {
       lng: position.coords.longitude,
     });
   }, []);
+
+  const handleLocateMe = useCallback(async () => {
+    setLocating(true);
+    try {
+      await loadUserLocation();
+      setFocusUser(true);
+    } finally {
+      setLocating(false);
+    }
+  }, [loadUserLocation]);
 
   const loadSiteCoordinates = useCallback(async (siteId: string) => {
     if (!siteId) return;
@@ -298,6 +314,7 @@ export function AttendanceScreen() {
           Alert.alert("Punch Out", message);
         }
         await loadPunchStatus();
+        await refreshTrackingState();
       } catch (err) {
         Alert.alert(
           "Attendance failed",
@@ -308,7 +325,7 @@ export function AttendanceScreen() {
         setPunchMode(null);
       }
     },
-    [userLocation, punchMode, selectedSiteId, loadPunchStatus],
+    [userLocation, punchMode, selectedSiteId, loadPunchStatus, refreshTrackingState],
   );
 
   const selectedSite = assignedSites.find((s) => s.site_id === selectedSiteId);
@@ -466,16 +483,19 @@ export function AttendanceScreen() {
                 ]}
               >
                 {siteNumbers && mapHtml ? (
-                  <WebView
-                    key={`${selectedSiteId}-${userLocation?.lat}-${userLocation?.lng}-${isDark}`}
-                    originWhitelist={["*"]}
-                    source={{ html: mapHtml }}
-                    style={styles.map}
-                    scrollEnabled={false}
-                    nestedScrollEnabled
-                    javaScriptEnabled
-                    domStorageEnabled
-                  />
+                  <>
+                    <WebView
+                      key={`${selectedSiteId}-${userLocation?.lat}-${userLocation?.lng}-${isDark}-${focusUser ? "focus" : "default"}`}
+                      originWhitelist={["*"]}
+                      source={{ html: mapHtml }}
+                      style={styles.map}
+                      scrollEnabled={false}
+                      nestedScrollEnabled
+                      javaScriptEnabled
+                      domStorageEnabled
+                    />
+                    <MapLocateButton onPress={handleLocateMe} loading={locating} />
+                  </>
                 ) : (
                   <View style={styles.mapPlaceholder}>
                     <Text
@@ -841,6 +861,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: "hidden",
     marginTop: spacing.xs,
+    position: "relative",
   },
   map: {
     flex: 1,

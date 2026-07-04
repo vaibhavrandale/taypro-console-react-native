@@ -1,6 +1,8 @@
 import 'react-native-gesture-handler';
+import './src/services/technicianLocationTracking';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
+import { LocationTrackingProvider } from './src/context/LocationTrackingContext';
 import { SiteDetailsProvider } from './src/context/SiteDetailsContext';
 import { SearchProvider } from './src/context/SearchContext';
 import { NotificationProvider } from './src/context/NotificationContext';
@@ -16,13 +18,15 @@ export default function App() {
         <StatusBarOverlayProvider>
           <AppStatusBar />
           <AuthProvider>
-            <SiteDetailsProvider>
-              <SearchProvider>
-                <NotificationProvider>
-                  <AppNavigator />
-                </NotificationProvider>
-              </SearchProvider>
-            </SiteDetailsProvider>
+            <LocationTrackingProvider>
+              <SiteDetailsProvider>
+                <SearchProvider>
+                  <NotificationProvider>
+                    <AppNavigator />
+                  </NotificationProvider>
+                </SearchProvider>
+              </SiteDetailsProvider>
+            </LocationTrackingProvider>
           </AuthProvider>
         </StatusBarOverlayProvider>
       </ThemeProvider>

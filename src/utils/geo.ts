@@ -5,8 +5,10 @@ export type GeoPoint = {
 };
 
 export function parseCoordinate(value?: number | string | null): number | null {
-  if (value == null || value === '') return null;
-  const parsed = typeof value === 'number' ? value : Number(value);
+  if (value == null) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const parsed =
+    typeof value === 'number' ? value : Number(String(value).trim());
   return Number.isFinite(parsed) ? parsed : null;
 }
 

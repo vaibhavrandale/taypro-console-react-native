@@ -14,7 +14,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "in.taypro.console",
       "infoPlist": {
-        "UIViewControllerBasedStatusBarAppearance": true
+        "UIViewControllerBasedStatusBarAppearance": true,
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -52,16 +53,10 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Nectyr to use your location to verify you are at the site for punch in/out."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/favicon.png",
-          "color": "#00C9A7",
-          "androidMode": "default",
-          "androidCollapsedTitle": "Nectyr alerts"
+          "locationWhenInUsePermission": "Allow Nectyr to use your location to verify you are at the site for punch in/out.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Nectyr to track your location while punched in until punch out, including when the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "expo-asset"

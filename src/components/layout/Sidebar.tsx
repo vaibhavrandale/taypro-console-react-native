@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   DrawerContentComponentProps,
   DrawerContentScrollView,
@@ -13,6 +13,7 @@ import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { Badge } from '../ui/Badge';
 import { Logo } from '../ui/Logo';
+import { canAccessAttendance, canSubmitDpr } from '../../utils/roles';
 
 export type DrawerRoute = {
   name: string;
@@ -34,7 +35,7 @@ type MenuSection = {
   items: DrawerRoute[];
 };
 
-const MENU_SECTIONS: MenuSection[] = [
+const BASE_MENU_SECTIONS: MenuSection[] = [
   {
     title: 'Main',
     items: [
@@ -72,6 +73,11 @@ const MENU_SECTIONS: MenuSection[] = [
         label: 'Gateways',
         icon: 'wifi-outline',
       },
+      {
+        name: 'RobotUptime',
+        label: 'Robot Uptime',
+        icon: 'stats-chart-outline',
+      },
     ],
   },
   {
@@ -89,6 +95,34 @@ const MENU_SECTIONS: MenuSection[] = [
     ],
   },
 ];
+
+function buildMenuSections(role?: string): MenuSection[] {
+  const mainItems = [...BASE_MENU_SECTIONS[0].items];
+  const insertIndex = mainItems.findIndex((item) => item.nestedScreen === 'Profile');
+
+  if (canAccessAttendance(role)) {
+    mainItems.splice(insertIndex, 0, {
+      name: 'MainTabs',
+      label: 'Attendance',
+      icon: 'finger-print-outline',
+      nestedScreen: 'Attendance',
+    });
+  }
+
+  if (canSubmitDpr(role)) {
+    mainItems.splice(insertIndex, 0, {
+      name: 'MainTabs',
+      label: 'DPR',
+      icon: 'document-text-outline',
+      nestedScreen: 'DPR',
+    });
+  }
+
+  return [
+    { title: 'Main', items: mainItems },
+    ...BASE_MENU_SECTIONS.slice(1),
+  ];
+}
 
 const SIDEBAR_TEXT = '#F0F4FF';
 const SIDEBAR_MUTED = '#8B9DC3';
@@ -205,6 +239,10 @@ export function Sidebar(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const active = getActiveRoute(props.state);
+  const menuSections = useMemo(
+    () => buildMenuSections(user?.role),
+    [user?.role],
+  );
 
   const navigateTo = (item: DrawerRoute) => {
     if (item.nestedScreen) {
@@ -264,7 +302,7 @@ export function Sidebar(props: DrawerContentComponentProps) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {MENU_SECTIONS.map((section) => (
+        {menuSections.map((section) => (
           <View key={section.title} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
             {section.items.map((item, index) => (

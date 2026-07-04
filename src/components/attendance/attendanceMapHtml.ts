@@ -13,6 +13,7 @@ export function buildAttendanceMapHtml(
   site: MapPoint,
   radiusMeters: number,
   markers: AttendanceMapMarkers = {},
+  focusUser = false,
 ) {
   const sitePayload = JSON.stringify(site).replace(/</g, "\\u003c");
   const userPayload = markers.user
@@ -45,6 +46,7 @@ export function buildAttendanceMapHtml(
     const punchIn = ${punchInPayload};
     const punchOut = ${punchOutPayload};
     const radiusMeters = ${radiusMeters};
+    const focusUser = ${focusUser ? "true" : "false"};
 
     const map = L.map('map', { zoomControl: true, attributionControl: true });
 
@@ -98,7 +100,9 @@ export function buildAttendanceMapHtml(
       addMarker(punchOut, '#EF4444', 'Punch out');
     }
 
-    if (bounds.length === 1) {
+    if (focusUser && user && user.latitude != null && user.longitude != null) {
+      map.setView([user.latitude, user.longitude], 16);
+    } else if (bounds.length === 1) {
       map.setView(siteLatLng, 14);
     } else {
       map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });

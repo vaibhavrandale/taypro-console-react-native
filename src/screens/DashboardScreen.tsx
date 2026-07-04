@@ -475,8 +475,8 @@ export function DashboardScreen() {
                   }}
                   onCleaningLog={() => {
                     if (!selectedSite?.site_id) return;
-                    navigation.navigate("Sites", {
-                      screen: "CleaningLogs",
+                    navigation.navigate("CleaningLogs", {
+                      screen: "SiteCleaningLogs",
                       params: {
                         siteId: selectedSite.site_id,
                         siteName: selectedSite.site_name,

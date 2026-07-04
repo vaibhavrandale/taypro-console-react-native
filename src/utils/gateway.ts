@@ -11,24 +11,36 @@ export type GatewayMapPoint = {
   source: 'gateway' | 'robots';
 };
 
+function isPlaceholderCoordinate(point: GeoPoint): boolean {
+  return point.latitude === 0 && point.longitude === 0;
+}
+
 function getGatewayCoords(gateway: SiteGateway): GeoPoint | null {
-  const fromLocation = gateway.location;
-  if (fromLocation) {
-    const normalized = normalizeLatLngPair(
-      fromLocation.latitude,
-      fromLocation.longitude,
-    );
-    if (normalized) {
-      return { ...normalized, mapUrl: fromLocation.map_url };
+  const extended = gateway as SiteGateway & {
+    gateway_latitude?: number | string;
+    latitude?: number | string;
+    longitude?: number | string;
+  };
+
+  const candidates: Array<[number | string | null | undefined, number | string | null | undefined]> = [
+    [gateway.location?.latitude, gateway.location?.longitude],
+    [extended.gateway_lattitude, extended.gateway_longitude],
+    [extended.gateway_longitude, extended.gateway_lattitude],
+    [extended.gateway_latitude, extended.gateway_longitude],
+    [extended.latitude, extended.longitude],
+  ];
+
+  for (const [first, second] of candidates) {
+    const normalized = normalizeLatLngPair(first, second);
+    if (normalized && isValidGeoPoint(normalized) && !isPlaceholderCoordinate(normalized)) {
+      return {
+        ...normalized,
+        mapUrl: gateway.location?.map_url,
+      };
     }
   }
 
-  const normalized = normalizeLatLngPair(
-    gateway.gateway_lattitude,
-    gateway.gateway_longitude,
-  );
-  if (!normalized) return null;
-  return normalized;
+  return null;
 }
 
 function getRobotCoords(robot: SiteRobot): GeoPoint | null {

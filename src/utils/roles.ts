@@ -6,3 +6,7 @@ const ATTENDANCE_ROLES = new Set([
 export function canAccessAttendance(role?: string): boolean {
   return role != null && ATTENDANCE_ROLES.has(role);
 }
+
+export function canSubmitDpr(role?: string): boolean {
+  return canAccessAttendance(role);
+}

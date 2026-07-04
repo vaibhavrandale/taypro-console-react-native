@@ -12,9 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import {
   CleaningLogTableHeader,
@@ -42,7 +40,7 @@ import {
 } from '../utils/cleaningLogs';
 import { SitesStackParamList } from '../navigation/SitesStack';
 
-type Route = RouteProp<SitesStackParamList, 'CleaningLogs'>;
+type Route = RouteProp<SitesStackParamList, 'SiteCleaningLogs'>;
 
 type ListItem = CleaningLogRecord | NotStartedRobot | OfflineRobotLog | DprRecord;
 
@@ -286,23 +284,14 @@ export function CleaningLogsScreen() {
     });
   }, [rawListData, search, category]);
 
-  const onDatePickerChange = useCallback(
-    (event: DateTimePickerEvent, pickedDate?: Date) => {
-      if (Platform.OS === 'android') {
-        setShowDatePicker(false);
-      }
+  const applyPickedDate = useCallback((picked?: Date) => {
+    if (!picked) return;
+    setDate(toDateInputValue(picked));
+  }, []);
 
-      if (event.type === 'dismissed') {
-        setShowDatePicker(false);
-        return;
-      }
-
-      if (pickedDate) {
-        setDate(toDateInputValue(pickedDate));
-      }
-    },
-    [],
-  );
+  const closeDatePicker = useCallback(() => {
+    setShowDatePicker(false);
+  }, []);
 
   const renderItem = ({ item, index }: { item: ListItem; index: number }) => (
     <CleaningLogTableRow
@@ -448,7 +437,7 @@ export function CleaningLogsScreen() {
         <View style={styles.datePickerOverlay}>
           <Pressable
             style={styles.datePickerBackdrop}
-            onPress={() => setShowDatePicker(false)}
+            onPress={closeDatePicker}
           />
           <View
             style={[
@@ -463,7 +452,7 @@ export function CleaningLogsScreen() {
               <Text style={[styles.datePickerTitle, { color: colors.textPrimary }]}>
                 Select Date
               </Text>
-              <Pressable onPress={() => setShowDatePicker(false)}>
+              <Pressable onPress={closeDatePicker}>
                 <Text style={[styles.datePickerDone, { color: colors.primary }]}>
                   Done
                 </Text>
@@ -474,7 +463,7 @@ export function CleaningLogsScreen() {
               mode="date"
               display="spinner"
               maximumDate={new Date()}
-              onChange={onDatePickerChange}
+              onValueChange={(_event, picked) => applyPickedDate(picked)}
               themeVariant={isDark ? 'dark' : 'light'}
             />
           </View>
@@ -486,7 +475,11 @@ export function CleaningLogsScreen() {
         mode="date"
         display="default"
         maximumDate={new Date()}
-        onChange={onDatePickerChange}
+        onValueChange={(_event, picked) => {
+          applyPickedDate(picked);
+          closeDatePicker();
+        }}
+        onDismiss={closeDatePicker}
       />
     )
   ) : null;

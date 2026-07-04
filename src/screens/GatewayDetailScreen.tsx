@@ -4,10 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { Navbar, Screen } from '../components/layout';
+import { Badge } from '../components/ui';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
 import type { DrawerParamList } from '../navigation/types';
+import {
+  formatGatewayUplink,
+  getGatewayStatusLabel,
+  getGatewayStatusVariant,
+} from '../utils/gatewayStatus';
 
 type Route = RouteProp<DrawerParamList, 'GatewayDetail'>;
 type Navigation = DrawerNavigationProp<DrawerParamList, 'GatewayDetail'>;
@@ -45,7 +51,16 @@ export function GatewayDetailScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<Navigation>();
   const route = useRoute<Route>();
-  const { gatewayId, gatewayName, gatewayType } = route.params;
+  const {
+    gatewayId,
+    gatewayName,
+    gatewayType,
+    gatewaySimNumber,
+    gatewayRobotNo,
+    gatewayLoraDeveui,
+    lastUplink,
+    gatewayStatus,
+  } = route.params;
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
@@ -67,10 +82,27 @@ export function GatewayDetailScreen() {
       />
 
       <Screen scroll>
+        <View style={styles.statusRow}>
+          <Badge
+            label={getGatewayStatusLabel(gatewayStatus)}
+            variant={getGatewayStatusVariant(gatewayStatus)}
+          />
+        </View>
+
         <View style={styles.grid}>
           <DetailRow label="Gateway Name" value={gatewayName ?? '—'} />
           <DetailRow label="Gateway Type" value={gatewayType ?? '—'} />
           <DetailRow label="Gateway ID" value={gatewayId ?? '—'} />
+          <DetailRow
+            label="SIM Number"
+            value={gatewaySimNumber?.trim() || 'Not set'}
+          />
+          <DetailRow label="Robot No" value={gatewayRobotNo?.trim() || '—'} />
+          <DetailRow label="LoRa DevEUI" value={gatewayLoraDeveui?.trim() || '—'} />
+          <DetailRow
+            label="Last Uplink"
+            value={formatGatewayUplink(lastUplink)}
+          />
         </View>
       </Screen>
     </View>
@@ -87,6 +119,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  statusRow: {
+    marginBottom: spacing.sm,
   },
   grid: {
     gap: spacing.sm,

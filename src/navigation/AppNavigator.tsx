@@ -20,6 +20,8 @@ import { BlockwiseScreen } from '../screens/BlockwiseScreen';
 import { BlockManagementScreen } from '../screens/BlockManagementScreen';
 import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
 import { GatewayDetailScreen } from '../screens/GatewayDetailScreen';
+import { GatewaysScreen } from '../screens/GatewaysScreen';
+import { RobotUptimeScreen } from '../screens/RobotUptimeScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
 
@@ -66,14 +68,8 @@ function MainDrawer() {
         options={{ drawerItemStyle: { display: 'none' } }}
       />
       <Drawer.Screen name="Sites" component={SitesStack} />
-      <Drawer.Screen name="Gateways">
-        {() => (
-          <PlaceholderScreen
-            title="Gateways"
-            description="Track LoRaWAN gateway health and uplink activity."
-          />
-        )}
-      </Drawer.Screen>
+      <Drawer.Screen name="Gateways" component={GatewaysScreen} />
+      <Drawer.Screen name="RobotUptime" component={RobotUptimeScreen} />
       <Drawer.Screen name="Users">
         {() => (
           <PlaceholderScreen
