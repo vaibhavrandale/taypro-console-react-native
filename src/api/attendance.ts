@@ -126,9 +126,8 @@ export async function fetchPunchStatus(expectedUserId: string): Promise<PunchSta
   const normalized = normalizePunchStatus(payload);
 
   if (
-    normalized.data &&
-    normalized.data.user_id &&
-    normalized.data.user_id !== expectedUserId
+    normalized.data?.user_id &&
+    String(normalized.data.user_id) !== String(expectedUserId)
   ) {
     return { punchedIn: false, punchedOut: false, data: null };
   }

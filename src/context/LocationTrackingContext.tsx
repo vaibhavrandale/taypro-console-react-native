@@ -45,7 +45,7 @@ export function LocationTrackingProvider({
     }
 
     try {
-      const status = await fetchPunchStatus();
+      const status = await fetchPunchStatus(user._id);
       const shouldTrack = Boolean(status.punchedIn && !status.punchedOut);
 
       if (shouldTrack) {
@@ -53,11 +53,15 @@ export function LocationTrackingProvider({
         const siteId = status.data?.site_id ?? user.assigned_sites?.[0]?.site_id;
 
         if (!trackingRef.current) {
-          await startTechnicianLocationTracking({
-            attendanceId,
-            siteId,
-          });
-          trackingRef.current = true;
+          try {
+            await startTechnicianLocationTracking({
+              attendanceId,
+              siteId,
+            });
+            trackingRef.current = true;
+          } catch {
+            trackingRef.current = false;
+          }
         }
         return;
       }

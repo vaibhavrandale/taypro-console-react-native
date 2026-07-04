@@ -106,6 +106,15 @@ export async function startTechnicianLocationTracking(session: TrackingSession) 
     },
   );
 
+  try {
+    const current = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+    await persistLocationUpdate(current.coords, 'foreground');
+  } catch {
+    // watchPositionAsync will capture the next update
+  }
+
   const hasStarted = await Location.hasStartedLocationUpdatesAsync(
     TECHNICIAN_LOCATION_TASK,
   );
