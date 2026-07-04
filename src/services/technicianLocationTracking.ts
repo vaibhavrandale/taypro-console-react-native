@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import type { LocationActivitySource } from '../types/locationActivity';
@@ -5,6 +6,7 @@ import {
   enqueueLocationActivity,
   flushLocationActivityQueue,
 } from '../utils/locationActivityQueue';
+import { setLocationTrackingActive } from '../utils/locationActivitySyncStatus';
 
 export const TECHNICIAN_LOCATION_TASK = 'TECHNICIAN_LOCATION_TRACKING';
 
@@ -45,17 +47,20 @@ async function persistLocationUpdate(
   void flushLocationActivityQueue();
 }
 
-TaskManager.defineTask(TECHNICIAN_LOCATION_TASK, async ({ data, error }) => {
-  if (error) return;
+if (!TaskManager.isTaskDefined(TECHNICIAN_LOCATION_TASK)) {
+  TaskManager.defineTask(TECHNICIAN_LOCATION_TASK, async ({ data, error }) => {
+    if (error) return;
 
-  const locations = (data as { locations?: Location.LocationObject[] } | undefined)
-    ?.locations;
+    const locations = (
+      data as { locations?: Location.LocationObject[] } | undefined
+    )?.locations;
 
-  if (!locations?.length) return;
+    if (!locations?.length) return;
 
-  const latest = locations[locations.length - 1];
-  await persistLocationUpdate(latest.coords, 'background');
-});
+    const latest = locations[locations.length - 1];
+    await persistLocationUpdate(latest.coords, 'background');
+  });
+}
 
 function startFlushTimer() {
   if (flushTimer) return;
@@ -70,26 +75,61 @@ function stopFlushTimer() {
   flushTimer = null;
 }
 
-async function ensurePermissions() {
-  const foreground = await Location.requestForegroundPermissionsAsync();
-  if (!foreground.granted) {
-    throw new Error('Location permission is required for technician tracking.');
+async function ensureForegroundPermission() {
+  const current = await Location.getForegroundPermissionsAsync();
+  if (current.granted) {
+    return true;
   }
 
-  const background = await Location.requestBackgroundPermissionsAsync();
-  if (!background.granted) {
-    // Foreground tracking still works; background may be limited on some devices.
-    return { backgroundGranted: false };
-  }
-
-  return { backgroundGranted: true };
+  const result = await Location.requestForegroundPermissionsAsync();
+  return result.granted;
 }
 
-export async function startTechnicianLocationTracking(session: TrackingSession) {
-  trackingSession = session;
+async function hasBackgroundPermission() {
+  const current = await Location.getBackgroundPermissionsAsync();
+  return current.granted;
+}
 
-  const { backgroundGranted } = await ensurePermissions();
+const BACKGROUND_LOCATION_OPTIONS: Location.LocationTaskOptions = {
+  accuracy: Location.Accuracy.Balanced,
+  timeInterval: 120_000,
+  distanceInterval: 25,
+  showsBackgroundLocationIndicator: true,
+  foregroundService: {
+    notificationTitle: 'Nectyr location tracking',
+    notificationBody: 'Tracking your site activity until punch out.',
+    notificationColor: '#00C9A7',
+  },
+};
 
+async function tryStartBackgroundUpdates() {
+  if (AppState.currentState !== 'active') {
+    return false;
+  }
+
+  if (!(await hasBackgroundPermission())) {
+    return false;
+  }
+
+  try {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+      TECHNICIAN_LOCATION_TASK,
+    );
+    if (hasStarted) {
+      return true;
+    }
+
+    await Location.startLocationUpdatesAsync(
+      TECHNICIAN_LOCATION_TASK,
+      BACKGROUND_LOCATION_OPTIONS,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function startForegroundWatch() {
   if (foregroundSubscription) {
     foregroundSubscription.remove();
     foregroundSubscription = null;
@@ -105,7 +145,9 @@ export async function startTechnicianLocationTracking(session: TrackingSession) 
       void persistLocationUpdate(location.coords, 'foreground');
     },
   );
+}
 
+async function captureImmediateLocation() {
   try {
     const current = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
@@ -114,43 +156,73 @@ export async function startTechnicianLocationTracking(session: TrackingSession) 
   } catch {
     // watchPositionAsync will capture the next update
   }
+}
 
-  const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-    TECHNICIAN_LOCATION_TASK,
-  );
-
-  if (!hasStarted && backgroundGranted) {
-    await Location.startLocationUpdatesAsync(TECHNICIAN_LOCATION_TASK, {
-      accuracy: Location.Accuracy.Balanced,
-      timeInterval: 120_000,
-      distanceInterval: 25,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'Nectyr location tracking',
-        notificationBody: 'Tracking your site activity until punch out.',
-        notificationColor: '#00C9A7',
-      },
-    });
+export async function requestBackgroundLocationForTracking() {
+  if (await hasBackgroundPermission()) {
+    return tryStartBackgroundUpdates();
   }
 
+  if (AppState.currentState !== 'active') {
+    return false;
+  }
+
+  try {
+    const result = await Location.requestBackgroundPermissionsAsync();
+    if (!result.granted) {
+      return false;
+    }
+
+    return tryStartBackgroundUpdates();
+  } catch {
+    return false;
+  }
+}
+
+export async function startTechnicianLocationTracking(session: TrackingSession) {
+  trackingSession = session;
+
+  const foregroundGranted = await ensureForegroundPermission();
+  if (!foregroundGranted) {
+    throw new Error('Location permission is required for technician tracking.');
+  }
+
+  try {
+    await startForegroundWatch();
+    await captureImmediateLocation();
+  } catch {
+    throw new Error('Unable to start location tracking on this device.');
+  }
+
+  // Only start the Android foreground service when background permission is
+  // already granted. Never open the background-permission settings during
+  // automatic sync — that backgrounds the app and can crash on Android.
+  await tryStartBackgroundUpdates();
+
   startFlushTimer();
+  setLocationTrackingActive(true);
   await flushLocationActivityQueue();
 }
 
 export async function stopTechnicianLocationTracking() {
   trackingSession = {};
+  setLocationTrackingActive(false);
 
   if (foregroundSubscription) {
     foregroundSubscription.remove();
     foregroundSubscription = null;
   }
 
-  const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-    TECHNICIAN_LOCATION_TASK,
-  );
+  try {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+      TECHNICIAN_LOCATION_TASK,
+    );
 
-  if (hasStarted) {
-    await Location.stopLocationUpdatesAsync(TECHNICIAN_LOCATION_TASK);
+    if (hasStarted) {
+      await Location.stopLocationUpdatesAsync(TECHNICIAN_LOCATION_TASK);
+    }
+  } catch {
+    // Ignore stop failures during cleanup.
   }
 
   stopFlushTimer();
@@ -158,8 +230,12 @@ export async function stopTechnicianLocationTracking() {
 }
 
 export async function isTechnicianLocationTrackingActive() {
-  const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-    TECHNICIAN_LOCATION_TASK,
-  );
-  return hasStarted || foregroundSubscription != null;
+  try {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+      TECHNICIAN_LOCATION_TASK,
+    );
+    return hasStarted || foregroundSubscription != null;
+  } catch {
+    return foregroundSubscription != null;
+  }
 }

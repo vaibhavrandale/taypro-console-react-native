@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { Navbar, Screen } from "../components/layout";
 import { PunchCaptureModal } from "../components/attendance/PunchCaptureModal";
+import { LocationSyncStatusCard } from "../components/attendance/LocationSyncStatusCard";
 import { buildAttendanceMapHtml } from "../components/attendance/attendanceMapHtml";
 import { MapLocateButton } from "../components/map/MapLocateButton";
 import { Badge, Button } from "../components/ui";
@@ -27,6 +28,7 @@ import {
 } from "../api/siteCoordinates";
 import { useAuth } from "../context/AuthContext";
 import { useLocationTracking } from "../context/LocationTrackingContext";
+import { requestBackgroundLocationForTracking } from "../services/technicianLocationTracking";
 import { useTheme } from "../theme";
 import { radius, spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
@@ -315,6 +317,9 @@ export function AttendanceScreen() {
         }
         await loadPunchStatus();
         await refreshTrackingState();
+        if (punchMode === "in") {
+          void requestBackgroundLocationForTracking();
+        }
       } catch (err) {
         Alert.alert(
           "Attendance failed",
@@ -570,6 +575,8 @@ export function AttendanceScreen() {
                   {formatDateTimeIST(punchStatus.data.punchout_time)}
                 </Text>
               ) : null}
+
+              <LocationSyncStatusCard visible={showPunchOut} />
 
               {punchInLocation?.lat != null &&
               punchInLocation?.lng != null &&
