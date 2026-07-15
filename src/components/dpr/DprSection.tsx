@@ -7,10 +7,11 @@ import { typography } from '../../theme/typography';
 type Props = {
   title: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 };
 
-export function DprSection({ title, hint, children }: Props) {
+export function DprSection({ title, hint, required, children }: Props) {
   const { colors } = useTheme();
 
   return (
@@ -24,7 +25,14 @@ export function DprSection({ title, hint, children }: Props) {
       ]}
     >
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.primary }]}>{title}</Text>
+        <View style={styles.titleRow}>
+          <Text style={[styles.title, { color: colors.primary }]}>{title}</Text>
+          {required ? (
+            <Text style={[styles.requiredMark, { color: colors.danger }]}>
+              *
+            </Text>
+          ) : null}
+        </View>
         {hint ? (
           <Text style={[styles.hint, { color: colors.badge.warning.text }]}>
             {hint}
@@ -77,9 +85,19 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: spacing.xs,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   title: {
     ...typography.label,
     fontSize: 14,
+  },
+  requiredMark: {
+    ...typography.label,
+    fontSize: 16,
+    lineHeight: 18,
   },
   hint: {
     ...typography.caption,

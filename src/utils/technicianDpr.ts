@@ -31,12 +31,17 @@ export function buildTechnicianDprPayload(
   form: DprFormState,
   breakdownReasons: BreakdownReason[],
 ): TechnicianDprPayload {
+  const comments = form.comments.trim();
+  if (!comments) {
+    throw new Error('Comments are required to submit this DPR.');
+  }
+
   const pm = form.preventive_maintenance_status;
   const now = new Date().toISOString();
 
   return {
     site_id: form.site_id,
-    comments: form.comments.trim(),
+    comments,
     report_date: now,
     new_report_date: now,
     robots_operational_details: {

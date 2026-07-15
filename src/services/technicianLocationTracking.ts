@@ -1,4 +1,5 @@
 import { AppState } from 'react-native';
+import Constants from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import type { LocationActivitySource } from '../types/locationActivity';
@@ -7,8 +8,12 @@ import {
   flushLocationActivityQueue,
 } from '../utils/locationActivityQueue';
 import { setLocationTrackingActive } from '../utils/locationActivitySyncStatus';
+import { requestAttendanceLocationPermissions } from '../utils/locationPermissions';
 
 export const TECHNICIAN_LOCATION_TASK = 'TECHNICIAN_LOCATION_TRACKING';
+
+/** Expo Go lacks background location on Android — skip those APIs to avoid LogBox spam. */
+const isExpoGo = Constants.appOwnership === 'expo';
 
 type TrackingSession = {
   siteId?: string;
@@ -27,6 +32,7 @@ async function persistLocationUpdate(
   coords: Location.LocationObjectCoords,
   source: LocationActivitySource,
 ) {
+  // Always write to device storage first so points survive offline / process death.
   await enqueueLocationActivity({
     client_id: createClientId(source),
     site_id: trackingSession.siteId,
@@ -44,7 +50,12 @@ async function persistLocationUpdate(
     source,
   });
 
-  void flushLocationActivityQueue();
+  // Best-effort upload. Failures leave points on disk until the app is online/opened.
+  try {
+    await flushLocationActivityQueue({ origin: 'immediate' });
+  } catch {
+    // Ignore — queue remains in AsyncStorage.
+  }
 }
 
 if (!TaskManager.isTaskDefined(TECHNICIAN_LOCATION_TASK)) {
@@ -65,7 +76,7 @@ if (!TaskManager.isTaskDefined(TECHNICIAN_LOCATION_TASK)) {
 function startFlushTimer() {
   if (flushTimer) return;
   flushTimer = setInterval(() => {
-    void flushLocationActivityQueue();
+    void flushLocationActivityQueue({ origin: 'deferred' });
   }, 60_000);
 }
 
@@ -103,6 +114,10 @@ const BACKGROUND_LOCATION_OPTIONS: Location.LocationTaskOptions = {
 };
 
 async function tryStartBackgroundUpdates() {
+  if (isExpoGo) {
+    return false;
+  }
+
   if (AppState.currentState !== 'active') {
     return false;
   }
@@ -168,8 +183,10 @@ export async function requestBackgroundLocationForTracking() {
   }
 
   try {
-    const result = await Location.requestBackgroundPermissionsAsync();
-    if (!result.granted) {
+    const permissions = await requestAttendanceLocationPermissions({
+      promptSettingsIfDenied: true,
+    });
+    if (!permissions.background) {
       return false;
     }
 
@@ -201,7 +218,7 @@ export async function startTechnicianLocationTracking(session: TrackingSession) 
 
   startFlushTimer();
   setLocationTrackingActive(true);
-  await flushLocationActivityQueue();
+  await flushLocationActivityQueue({ origin: 'deferred' });
 }
 
 export async function stopTechnicianLocationTracking() {
@@ -213,23 +230,29 @@ export async function stopTechnicianLocationTracking() {
     foregroundSubscription = null;
   }
 
-  try {
-    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
-      TECHNICIAN_LOCATION_TASK,
-    );
+  if (!isExpoGo) {
+    try {
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+        TECHNICIAN_LOCATION_TASK,
+      );
 
-    if (hasStarted) {
-      await Location.stopLocationUpdatesAsync(TECHNICIAN_LOCATION_TASK);
+      if (hasStarted) {
+        await Location.stopLocationUpdatesAsync(TECHNICIAN_LOCATION_TASK);
+      }
+    } catch {
+      // Ignore stop failures during cleanup.
     }
-  } catch {
-    // Ignore stop failures during cleanup.
   }
 
   stopFlushTimer();
-  await flushLocationActivityQueue();
+  await flushLocationActivityQueue({ origin: 'deferred' });
 }
 
 export async function isTechnicianLocationTrackingActive() {
+  if (isExpoGo) {
+    return foregroundSubscription != null;
+  }
+
   try {
     const hasStarted = await Location.hasStartedLocationUpdatesAsync(
       TECHNICIAN_LOCATION_TASK,

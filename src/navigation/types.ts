@@ -1,6 +1,8 @@
 import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { MainTabParamList } from './MainTabs';
 import type { SitesStackParamList } from './SitesStack';
+import type { TimersStackParamList } from './TimersStack';
+import type { ServiceTicketsStackParamList } from './ServiceTicketsStack';
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
@@ -43,7 +45,8 @@ export type DrawerParamList = {
         siteName?: string;
       }
     | undefined;
+  Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;
-  ServiceTickets: undefined;
+  ServiceTickets: NavigatorScreenParams<ServiceTicketsStackParamList> | undefined;
   Settings: undefined;
 };

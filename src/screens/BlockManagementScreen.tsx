@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -209,7 +209,7 @@ export function BlockManagementScreen() {
     };
 
     if (!commandableRobots.length) {
-      Alert.alert(
+      appAlert(
         'No robots',
         'There are no robots with command details in this block.',
       );
@@ -225,7 +225,7 @@ export function BlockManagementScreen() {
         robots: commandableRobots,
       });
 
-      Alert.alert(
+      appAlert(
         'Command sent',
         result.message ||
           `${labels[command]} sent to ${commandableRobots.length} robot${commandableRobots.length === 1 ? '' : 's'}.`,
@@ -233,7 +233,7 @@ export function BlockManagementScreen() {
 
       void loadRobots(true);
     } catch (err) {
-      Alert.alert(
+      appAlert(
         'Command failed',
         err instanceof Error ? err.message : 'Failed to send block commands',
       );
@@ -244,7 +244,7 @@ export function BlockManagementScreen() {
 
   const handleBulkCommand = (command: RobotCommand) => {
     if (!canSendCommands) {
-      Alert.alert('Access denied', 'You do not have robot command access.');
+      appAlert('Access denied', 'You do not have robot command access.');
       return;
     }
 
@@ -254,7 +254,7 @@ export function BlockManagementScreen() {
       return: 'Return All',
     };
 
-    Alert.alert(
+    appAlert(
       labels[command],
       `Send ${labels[command].toLowerCase()} to ${commandableRobots.length} robot${commandableRobots.length === 1 ? '' : 's'} in ${block}?`,
       [

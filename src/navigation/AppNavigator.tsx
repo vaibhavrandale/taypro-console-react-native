@@ -15,6 +15,8 @@ import { LoginScreen } from '../screens/LoginScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
 import { MainTabs } from './MainTabs';
 import { SitesStack } from './SitesStack';
+import { TimersStack } from './TimersStack';
+import { ServiceTicketsStack } from './ServiceTicketsStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
 import { BlockwiseScreen } from '../screens/BlockwiseScreen';
 import { BlockManagementScreen } from '../screens/BlockManagementScreen';
@@ -24,6 +26,7 @@ import { GatewaysScreen } from '../screens/GatewaysScreen';
 import { RobotUptimeScreen } from '../screens/RobotUptimeScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
+import { TimerExecutionNotificationModal } from '../components/notifications/TimerExecutionNotificationModal';
 
 const AuthStack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -70,6 +73,7 @@ function MainDrawer() {
       <Drawer.Screen name="Sites" component={SitesStack} />
       <Drawer.Screen name="Gateways" component={GatewaysScreen} />
       <Drawer.Screen name="RobotUptime" component={RobotUptimeScreen} />
+      <Drawer.Screen name="Timers" component={TimersStack} />
       <Drawer.Screen name="Users">
         {() => (
           <PlaceholderScreen
@@ -78,15 +82,7 @@ function MainDrawer() {
           />
         )}
       </Drawer.Screen>
-      <Drawer.Screen name="ServiceTickets">
-        {() => (
-          <PlaceholderScreen
-            title="Service Tickets"
-            description="Open, assigned, and resolved service tickets."
-            badgeLabel="3 Open"
-          />
-        )}
-      </Drawer.Screen>
+      <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
       <Drawer.Screen name="Settings">
         {() => (
           <PlaceholderScreen
@@ -99,6 +95,7 @@ function MainDrawer() {
     </Drawer.Navigator>
       <GlobalSearchModal />
       <CustomNotificationModal />
+      <TimerExecutionNotificationModal />
     </>
   );
 }

@@ -78,6 +78,11 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         label: 'Robot Uptime',
         icon: 'stats-chart-outline',
       },
+      {
+        name: 'Timers',
+        label: 'Timers',
+        icon: 'timer-outline',
+      },
     ],
   },
   {
@@ -88,8 +93,6 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         name: 'ServiceTickets',
         label: 'Service Tickets',
         icon: 'construct-outline',
-        badge: '3',
-        badgeVariant: 'warning',
       },
       { name: 'Settings', label: 'Settings', icon: 'settings-outline' },
     ],

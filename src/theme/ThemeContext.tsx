@@ -23,11 +23,18 @@ const THEME_STORAGE_KEY = '@taypro_theme_mode';
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
+function persistTheme(mode: ThemeMode) {
+  // Defer disk write so it never races the paint of the new theme.
+  setTimeout(() => {
+    void AsyncStorage.setItem(THEME_STORAGE_KEY, mode);
+  }, 0);
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>('dark');
 
   useEffect(() => {
-    AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
+    void AsyncStorage.getItem(THEME_STORAGE_KEY).then((stored) => {
       if (stored === 'light' || stored === 'dark') {
         setMode(stored);
       }
@@ -35,13 +42,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setTheme = useCallback((next: ThemeMode) => {
-    setMode(next);
-    AsyncStorage.setItem(THEME_STORAGE_KEY, next);
+    setMode((prev) => {
+      if (prev === next) return prev;
+      persistTheme(next);
+      return next;
+    });
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setTheme(mode === 'dark' ? 'light' : 'dark');
-  }, [mode, setTheme]);
+    setMode((prev) => {
+      const next: ThemeMode = prev === 'dark' ? 'light' : 'dark';
+      persistTheme(next);
+      return next;
+    });
+  }, []);
 
   const value = useMemo<ThemeContextValue>(
     () => ({

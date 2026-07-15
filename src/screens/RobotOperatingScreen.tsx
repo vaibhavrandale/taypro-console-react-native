@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
-} from "react-native";
+} from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
@@ -269,13 +269,13 @@ export function RobotOperatingScreen() {
         site_id: robot.site_id ?? siteId,
       });
 
-      Alert.alert(
+      appAlert(
         "Command sent",
         result.message || `${labels[command]} command sent to ${robotNo}.`,
       );
       void loadRobot(true);
     } catch (err) {
-      Alert.alert(
+      appAlert(
         "Command failed",
         err instanceof Error ? err.message : "Failed to send robot command",
       );
@@ -286,17 +286,17 @@ export function RobotOperatingScreen() {
 
   const handleCommand = (command: RobotCommand) => {
     if (!canSendCommands) {
-      Alert.alert("Access denied", "You do not have robot command access.");
+      appAlert("Access denied", "You do not have robot command access.");
       return;
     }
 
     if (!robot) {
-      Alert.alert("Robot not loaded", "Please refresh and try again.");
+      appAlert("Robot not loaded", "Please refresh and try again.");
       return;
     }
 
     if (!robot.deveui || robot.lora_no == null) {
-      Alert.alert(
+      appAlert(
         "Missing details",
         "Robot DevEUI or LoRa number is missing, so the command cannot be sent.",
       );
@@ -309,7 +309,7 @@ export function RobotOperatingScreen() {
       return: "Return",
     };
 
-    Alert.alert(
+    appAlert(
       `${labels[command]} robot`,
       `Send ${labels[command].toLowerCase()} command to ${robotNo}?`,
       [

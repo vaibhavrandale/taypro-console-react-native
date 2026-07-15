@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
+import { appAlert } from '../../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -64,7 +64,7 @@ export function ProfileCameraModal({
         setCapturedUri(photo.uri);
       }
     } catch {
-      Alert.alert('Capture failed', 'Could not take photo. Please try again.');
+      appAlert('Capture failed', 'Could not take photo. Please try again.');
     }
   }, [cameraReady]);
 
@@ -76,10 +76,10 @@ export function ProfileCameraModal({
       const imageUrl = await uploadUserImage(capturedUri);
       const message = await saveUserImage(userId, imageUrl);
       await onSaved();
-      Alert.alert('Success', message);
+      appAlert('Success', message);
       handleClose();
     } catch (err) {
-      Alert.alert(
+      appAlert(
         'Save failed',
         err instanceof Error ? err.message : 'Could not save photo',
       );

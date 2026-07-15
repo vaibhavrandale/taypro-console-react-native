@@ -6,12 +6,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {
-  Alert,
-  AppState,
-  InteractionManager,
-  type AppStateStatus,
-} from 'react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useAuth } from './AuthContext';
 import { fetchPunchStatus } from '../api/attendance';
 import {
@@ -21,6 +16,7 @@ import {
 } from '../services/technicianLocationTracking';
 import {
   flushLocationActivityQueue,
+  hydrateLocationDebugStats,
   refreshLocationQueueCount,
   type LocationFlushResult,
 } from '../utils/locationActivityQueue';
@@ -32,7 +28,6 @@ import {
   type LocationSyncSnapshot,
 } from '../utils/locationActivitySyncStatus';
 import { canAccessAttendance } from '../utils/roles';
-import { formatDateTimeIST } from '../utils/datetime';
 
 type LocationTrackingContextValue = {
   refreshTrackingState: () => Promise<void>;
@@ -48,26 +43,6 @@ const LocationTrackingContext = createContext<
 const PUNCH_POLL_MS = 2 * 60_000;
 const STATUS_POLL_MS = 15_000;
 
-function showFirstSyncAlert(snapshot: LocationSyncSnapshot) {
-  if (AppState.currentState !== 'active') {
-    return;
-  }
-
-  const timeLabel = snapshot.lastSyncedAt
-    ? formatDateTimeIST(snapshot.lastSyncedAt)
-    : 'just now';
-  const coords =
-    snapshot.lastSyncedLat != null && snapshot.lastSyncedLng != null
-      ? `\n${snapshot.lastSyncedLat.toFixed(6)}, ${snapshot.lastSyncedLng.toFixed(6)}`
-      : '';
-
-  Alert.alert(
-    'Location saved',
-    `Your location was uploaded to the server at ${timeLabel}.${coords}`,
-    [{ text: 'OK' }],
-  );
-}
-
 export function LocationTrackingProvider({
   children,
 }: {
@@ -77,7 +52,6 @@ export function LocationTrackingProvider({
   const trackingRef = useRef(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const firstSyncAlertShownRef = useRef(false);
   const [syncStatus, setSyncStatus] = useState<LocationSyncSnapshot>(
     getLocationSyncSnapshot,
   );
@@ -86,16 +60,18 @@ export function LocationTrackingProvider({
   useEffect(() => {
     return subscribeLocationSyncStatus((next) => {
       setSyncStatus(next);
-
-      if (
-        next.totalSynced > 0 &&
-        !firstSyncAlertShownRef.current &&
-        next.lastSyncedAt
-      ) {
-        firstSyncAlertShownRef.current = true;
-        showFirstSyncAlert(next);
-      }
     });
+  }, []);
+
+  /** Upload any points stored on device (offline queue). Safe when offline. */
+  const flushPendingQueue = useCallback(async () => {
+    setSyncingNow(true);
+    try {
+      return await flushLocationActivityQueue({ origin: 'deferred' });
+    } finally {
+      setSyncingNow(false);
+      await refreshLocationQueueCount();
+    }
   }, []);
 
   const syncTracking = useCallback(async () => {
@@ -138,7 +114,6 @@ export function LocationTrackingProvider({
         await stopTechnicianLocationTracking();
         trackingRef.current = false;
         setLocationTrackingActive(false);
-        firstSyncAlertShownRef.current = false;
       }
     } catch {
       const active = await isTechnicianLocationTrackingActive();
@@ -148,31 +123,28 @@ export function LocationTrackingProvider({
   }, [isAuthenticated, user?._id, user?.role, user?.assigned_sites]);
 
   const syncNow = useCallback(async () => {
-    setSyncingNow(true);
-    try {
-      return await flushLocationActivityQueue();
-    } finally {
-      setSyncingNow(false);
-      await refreshLocationQueueCount();
-    }
-  }, []);
+    return flushPendingQueue();
+  }, [flushPendingQueue]);
 
   const refreshTrackingState = useCallback(async () => {
+    // Always try uploading queued points first (works after offline / cold start).
+    await flushPendingQueue();
     await syncTracking();
-    await syncNow();
+    await flushPendingQueue();
     await refreshLocationQueueCount();
-  }, [syncTracking, syncNow]);
+  }, [flushPendingQueue, syncTracking]);
 
   useEffect(() => {
     if (AppState.currentState !== 'active') {
       return;
     }
 
-    const task = InteractionManager.runAfterInteractions(() => {
+    // ponytail: avoid deprecated InteractionManager; defer past first paint
+    const timer = setTimeout(() => {
       void refreshTrackingState();
-    });
+    }, 0);
 
-    return () => task.cancel();
+    return () => clearTimeout(timer);
   }, [refreshTrackingState]);
 
   useEffect(() => {
@@ -187,7 +159,7 @@ export function LocationTrackingProvider({
 
     pollTimerRef.current = setInterval(() => {
       void syncTracking();
-      void syncNow();
+      void flushPendingQueue();
     }, PUNCH_POLL_MS);
 
     return () => {
@@ -196,7 +168,7 @@ export function LocationTrackingProvider({
         pollTimerRef.current = null;
       }
     };
-  }, [isAuthenticated, user?.role, syncTracking, syncNow]);
+  }, [isAuthenticated, user?.role, syncTracking, flushPendingQueue]);
 
   useEffect(() => {
     if (statusPollRef.current) {
@@ -223,7 +195,11 @@ export function LocationTrackingProvider({
   useEffect(() => {
     const onAppStateChange = (state: AppStateStatus) => {
       if (state === 'active') {
+        // App opened / returned from background → upload anything stored on disk.
         void refreshTrackingState();
+      } else if (state === 'background' || state === 'inactive') {
+        // Best-effort flush before leaving foreground; queue stays if offline.
+        void flushLocationActivityQueue({ origin: 'deferred' });
       }
     };
 
@@ -232,13 +208,20 @@ export function LocationTrackingProvider({
   }, [refreshTrackingState]);
 
   useEffect(() => {
+    void hydrateLocationDebugStats();
+  }, []);
+
+  useEffect(() => {
     if (!isAuthenticated) {
       trackingRef.current = false;
-      firstSyncAlertShownRef.current = false;
       resetLocationSyncStatus();
       void stopTechnicianLocationTracking();
+      return;
     }
-  }, [isAuthenticated]);
+
+    // Logged-in cold start: upload any leftover offline points.
+    void flushPendingQueue();
+  }, [isAuthenticated, flushPendingQueue]);
 
   const value = React.useMemo(
     () => ({

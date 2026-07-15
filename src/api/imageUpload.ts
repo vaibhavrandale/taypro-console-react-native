@@ -23,7 +23,10 @@ function normalizeUploadUri(uri: string) {
  * Multipart upload via XMLHttpRequest — React Native's fetch (Expo 57) does not
  * support the { uri, type, name } FormData parts that multer expects.
  */
-export async function uploadUserImage(localUri: string): Promise<string> {
+async function uploadImageToPath(
+  localUri: string,
+  path: string,
+): Promise<string> {
   const token = await getAuthToken();
   const form = new FormData();
   form.append('file', {
@@ -78,7 +81,7 @@ export async function uploadUserImage(localUri: string): Promise<string> {
       reject(new Error('Upload was cancelled'));
     };
 
-    xhr.open('POST', `${API_BASE_URL}/image-upload/user-images`);
+    xhr.open('POST', `${API_BASE_URL}${path}`);
     xhr.withCredentials = false;
     xhr.setRequestHeader('Accept', 'application/json');
     if (token) {
@@ -87,4 +90,14 @@ export async function uploadUserImage(localUri: string): Promise<string> {
     // Do not set Content-Type — XHR sets multipart boundary automatically.
     xhr.send(form);
   });
+}
+
+export async function uploadUserImage(localUri: string): Promise<string> {
+  return uploadImageToPath(localUri, '/image-upload/user-images');
+}
+
+export async function uploadServiceTicketImage(
+  localUri: string,
+): Promise<string> {
+  return uploadImageToPath(localUri, '/image-upload/service-tickets');
 }

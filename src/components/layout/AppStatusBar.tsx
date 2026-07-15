@@ -19,11 +19,12 @@ export function AppStatusBar({ overlay: overlayProp = false }: Props) {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
 
+    // animated=false — theme toggle should feel instant, not a status-bar fade.
     RNStatusBar.setTranslucent(false);
-    RNStatusBar.setBackgroundColor(backgroundColor, true);
+    RNStatusBar.setBackgroundColor(backgroundColor, false);
     RNStatusBar.setBarStyle(
       overlay || isDark ? 'light-content' : 'dark-content',
-      true,
+      false,
     );
   }, [overlay, isDark, backgroundColor]);
 
@@ -31,7 +32,7 @@ export function AppStatusBar({ overlay: overlayProp = false }: Props) {
     if (Platform.OS !== 'ios') return;
     RNStatusBar.setBarStyle(
       overlay || isDark ? 'light-content' : 'dark-content',
-      true,
+      false,
     );
   }, [overlay, isDark]);
 

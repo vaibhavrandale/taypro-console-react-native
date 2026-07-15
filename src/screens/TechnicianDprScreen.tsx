@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   StyleSheet,
@@ -76,6 +76,7 @@ export function TechnicianDprScreen() {
   const [techLoading, setTechLoading] = useState(false);
   const [robotLoading, setRobotLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [commentsError, setCommentsError] = useState('');
   const [summarizingComments, setSummarizingComments] = useState(false);
   const [error, setError] = useState('');
 
@@ -230,7 +231,7 @@ export function TechnicianDprScreen() {
       setRobots(data);
     } catch {
       setRobots([]);
-      Alert.alert('Error', 'Failed to load robots for this site.');
+      appAlert('Error', 'Failed to load robots for this site.');
       setRobotPickerIndex(null);
     } finally {
       setRobotLoading(false);
@@ -281,7 +282,7 @@ export function TechnicianDprScreen() {
   const summarizeComments = async () => {
     const text = form.comments.trim();
     if (!text) {
-      Alert.alert('Comments required', 'Please enter some comments to improve.');
+      appAlert('Comments required', 'Please enter some comments to improve.');
       return;
     }
 
@@ -294,20 +295,23 @@ export function TechnicianDprScreen() {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to improve comments';
-      Alert.alert('Improve failed', message);
+      appAlert('Improve failed', message);
     } finally {
       setSummarizingComments(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!form.comments.trim()) {
-      Alert.alert('Missing comments', 'Please enter DPR comments.');
+    const comments = form.comments.trim();
+    if (!comments) {
+      setCommentsError('Comments are required to submit this DPR.');
+      appAlert('Comments required', 'Please enter DPR comments before submitting.');
       return;
     }
+    setCommentsError('');
 
     if (form.technician_present.length === 0) {
-      Alert.alert(
+      appAlert(
         'Technicians required',
         'Select at least one technician present.',
       );
@@ -318,11 +322,15 @@ export function TechnicianDprScreen() {
     setError('');
 
     try {
-      const payload = buildTechnicianDprPayload(form, breakdownReasons);
+      const payload = buildTechnicianDprPayload(
+        { ...form, comments },
+        breakdownReasons,
+      );
       await createTechnicianDpr(payload);
-      Alert.alert('Success', 'DPR submitted successfully.');
+      appAlert('Success', 'DPR submitted successfully.');
       setForm(createEmptyDprForm(form.site_id));
       setBreakdownReasons([]);
+      setCommentsError('');
       await loadInitialData();
       await loadTechnicians(form.site_id);
       navigation.navigate('DprHistory');
@@ -330,7 +338,7 @@ export function TechnicianDprScreen() {
       const message =
         err instanceof Error ? err.message : 'Failed to submit DPR';
       setError(message);
-      Alert.alert('Submit failed', message);
+      appAlert('Submit failed', message);
     } finally {
       setSubmitting(false);
     }
@@ -576,10 +584,14 @@ export function TechnicianDprScreen() {
               </View>
             ))}
 
-            <DprSection title="Comments">
+            <DprSection
+              title="Comments"
+              required
+              hint="Required — describe today's site status and issues."
+            >
               <View style={styles.commentsHeader}>
                 <Text style={[styles.commentsHint, { color: colors.textMuted }]}>
-                  Describe today&apos;s site status and issues.
+                  This field must be filled before you can submit.
                 </Text>
                 <Button
                   title={
@@ -595,10 +607,13 @@ export function TechnicianDprScreen() {
               </View>
               <TextInput
                 value={form.comments}
-                onChangeText={(comments) =>
-                  setForm((prev) => ({ ...prev, comments }))
-                }
-                placeholder="Enter DPR comments..."
+                onChangeText={(comments) => {
+                  setForm((prev) => ({ ...prev, comments }));
+                  if (commentsError && comments.trim()) {
+                    setCommentsError('');
+                  }
+                }}
+                placeholder="Enter DPR comments (required)..."
                 placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={5}
@@ -607,14 +622,21 @@ export function TechnicianDprScreen() {
                   styles.commentsInput,
                   {
                     backgroundColor: colors.inputBackground,
-                    borderColor: colors.inputBorder,
+                    borderColor: commentsError
+                      ? colors.danger
+                      : colors.inputBorder,
                     color: colors.textPrimary,
                   },
                 ]}
               />
+              {commentsError ? (
+                <Text style={[styles.fieldError, { color: colors.danger }]}>
+                  {commentsError}
+                </Text>
+              ) : null}
             </DprSection>
 
-            <DprSection title="Technicians Present">
+            <DprSection title="Technicians Present" required>
               {techLoading ? (
                 <ActivityIndicator color={colors.primary} />
               ) : technicians.length === 0 ? (
@@ -687,11 +709,7 @@ export function TechnicianDprScreen() {
               title="Submit DPR"
               fullWidth
               loading={submitting}
-              disabled={
-                submitting ||
-                !form.comments.trim() ||
-                form.technician_present.length === 0
-              }
+              disabled={submitting}
               onPress={() => void handleSubmit()}
             />
           </View>
@@ -791,12 +809,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   commentsInput: {
-    minHeight: 120,
     borderWidth: 1,
     borderRadius: radius.md,
-    padding: spacing.sm,
+    minHeight: 120,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     ...typography.bodySmall,
     lineHeight: 20,
+  },
+  fieldError: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: '600',
   },
   techRow: {
     flexDirection: 'row',

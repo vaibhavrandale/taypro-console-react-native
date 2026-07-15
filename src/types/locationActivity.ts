@@ -13,6 +13,8 @@ export type LocationActivityPoint = {
   heading?: number;
   altitude?: number;
   recorded_at: string;
+  /** When the point was written to device queue (for direct vs memory stats). */
+  enqueued_at?: string;
   captured_offline: boolean;
   source: LocationActivitySource;
 };

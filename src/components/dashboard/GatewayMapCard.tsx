@@ -1,5 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import React, { memo, useCallback, useMemo, useState } from 'react';
+import { appAlert } from '../../utils/appAlert';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { WebView } from 'react-native-webview';
 import { MapLocateButton } from '../map/MapLocateButton';
 import { useTheme } from '../../theme';
@@ -15,8 +20,31 @@ type Props = {
   robots?: SiteRobot[];
 };
 
+/** Isolated so theme toggles don't re-render / reload the Leaflet WebView. */
+const GatewayMapWebView = memo(function GatewayMapWebView({
+  html,
+  focusUser,
+}: {
+  html: string;
+  focusUser: boolean;
+}) {
+  return (
+    <WebView
+      key={focusUser ? 'focus' : 'default'}
+      originWhitelist={['*']}
+      source={{ html }}
+      style={styles.map}
+      scrollEnabled={false}
+      nestedScrollEnabled
+      javaScriptEnabled
+      domStorageEnabled
+      setSupportMultipleWindows={false}
+    />
+  );
+});
+
 export function GatewayMapCard({ gateways, robots = [] }: Props) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null);
   const [focusUser, setFocusUser] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -26,9 +54,10 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
     [gateways, robots],
   );
 
+  // isDark unused by map HTML — don't rebuild the huge string on theme toggle.
   const html = useMemo(
-    () => buildGatewayLeafletHtml(mapPoints, isDark, userLocation, focusUser),
-    [mapPoints, isDark, userLocation, focusUser],
+    () => buildGatewayLeafletHtml(mapPoints, false, userLocation, focusUser),
+    [mapPoints, userLocation, focusUser],
   );
 
   const handleLocateMe = useCallback(async () => {
@@ -38,7 +67,7 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
       setUserLocation(location);
       setFocusUser(true);
     } catch (err) {
-      Alert.alert(
+      appAlert(
         'Location unavailable',
         err instanceof Error ? err.message : 'Could not get your current location.',
       );
@@ -82,17 +111,7 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
       >
         {showMap ? (
           <>
-            <WebView
-              key={`${html}-${focusUser ? 'focus' : 'default'}`}
-              originWhitelist={['*']}
-              source={{ html }}
-              style={styles.map}
-              scrollEnabled={false}
-              nestedScrollEnabled
-              javaScriptEnabled
-              domStorageEnabled
-              setSupportMultipleWindows={false}
-            />
+            <GatewayMapWebView html={html} focusUser={focusUser} />
             <MapLocateButton onPress={handleLocateMe} loading={locating} />
           </>
         ) : (

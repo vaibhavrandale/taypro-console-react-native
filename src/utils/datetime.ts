@@ -15,6 +15,30 @@ export function formatDateTimeIST(value?: string | null) {
   });
 }
 
+/** Relative time like "3 hours ago". Manual — Intl.RelativeTimeFormat missing on some Android/RN builds. */
+export function formatRelativeTime(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const diffSec = Math.round((Date.now() - date.getTime()) / 1000);
+  const past = diffSec >= 0;
+  const abs = Math.abs(diffSec);
+
+  const pick = (n: number, unit: string) => {
+    const label = n === 1 ? unit : `${unit}s`;
+    return past ? `${n} ${label} ago` : `in ${n} ${label}`;
+  };
+
+  if (abs < 60) return past ? 'just now' : 'in a moment';
+  if (abs < 3600) return pick(Math.round(abs / 60), 'minute');
+  if (abs < 86400) return pick(Math.round(abs / 3600), 'hour');
+  if (abs < 604800) return pick(Math.round(abs / 86400), 'day');
+  if (abs < 2592000) return pick(Math.round(abs / 604800), 'week');
+  if (abs < 31536000) return pick(Math.round(abs / 2592000), 'month');
+  return pick(Math.round(abs / 31536000), 'year');
+}
+
 export function formatDateIST(value?: string | null) {
   if (!value) return '—';
   const date = new Date(value);

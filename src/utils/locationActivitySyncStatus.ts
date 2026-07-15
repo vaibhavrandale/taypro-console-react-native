@@ -1,14 +1,24 @@
 export type LocationSyncSnapshot = {
   isTracking: boolean;
+  /** Points waiting on device (AsyncStorage). */
   queueCount: number;
+  /** Total points captured this install/session (persisted). */
   totalCaptured: number;
+  /** Total points uploaded to server (direct + from memory). */
   totalSynced: number;
+  /** Uploaded in the same moment they were captured (online). */
+  uploadedDirect: number;
+  /** Uploaded later from device queue (offline / app reopen). */
+  uploadedFromMemory: number;
   lastCapturedAt: string | null;
   lastSyncedAt: string | null;
   lastSyncedLat: number | null;
   lastSyncedLng: number | null;
   lastError: string | null;
+  lastFlushOrigin: 'immediate' | 'deferred' | null;
 };
+
+export type LocationFlushOrigin = 'immediate' | 'deferred';
 
 type Listener = (snapshot: LocationSyncSnapshot) => void;
 
@@ -17,11 +27,14 @@ const EMPTY_SNAPSHOT: LocationSyncSnapshot = {
   queueCount: 0,
   totalCaptured: 0,
   totalSynced: 0,
+  uploadedDirect: 0,
+  uploadedFromMemory: 0,
   lastCapturedAt: null,
   lastSyncedAt: null,
   lastSyncedLat: null,
   lastSyncedLng: null,
   lastError: null,
+  lastFlushOrigin: null,
 };
 
 let snapshot: LocationSyncSnapshot = { ...EMPTY_SNAPSHOT };
@@ -43,7 +56,28 @@ export function subscribeLocationSyncStatus(listener: Listener): () => void {
 }
 
 export function resetLocationSyncStatus() {
-  snapshot = { ...EMPTY_SNAPSHOT };
+  snapshot = {
+    ...EMPTY_SNAPSHOT,
+    queueCount: snapshot.queueCount,
+  };
+  emit();
+}
+
+/** Restore persisted test counters after app restart. */
+export function hydrateLocationSyncCounters(partial: {
+  totalCaptured?: number;
+  totalSynced?: number;
+  uploadedDirect?: number;
+  uploadedFromMemory?: number;
+}) {
+  snapshot = {
+    ...snapshot,
+    totalCaptured: partial.totalCaptured ?? snapshot.totalCaptured,
+    totalSynced: partial.totalSynced ?? snapshot.totalSynced,
+    uploadedDirect: partial.uploadedDirect ?? snapshot.uploadedDirect,
+    uploadedFromMemory:
+      partial.uploadedFromMemory ?? snapshot.uploadedFromMemory,
+  };
   emit();
 }
 
@@ -71,14 +105,19 @@ export function reportLocationCaptured(lat: number, lng: number) {
 export function reportLocationSynced(
   syncedCount: number,
   remaining: number,
-  lastPoint?: { lat: number; lng: number },
+  lastPoint: { lat: number; lng: number } | undefined,
+  origin: LocationFlushOrigin,
+  breakdown: { direct: number; fromMemory: number },
 ) {
   snapshot = {
     ...snapshot,
     totalSynced: snapshot.totalSynced + syncedCount,
+    uploadedDirect: snapshot.uploadedDirect + breakdown.direct,
+    uploadedFromMemory: snapshot.uploadedFromMemory + breakdown.fromMemory,
     queueCount: remaining,
     lastSyncedAt: new Date().toISOString(),
     lastError: null,
+    lastFlushOrigin: origin,
     lastSyncedLat: lastPoint?.lat ?? snapshot.lastSyncedLat,
     lastSyncedLng: lastPoint?.lng ?? snapshot.lastSyncedLng,
   };

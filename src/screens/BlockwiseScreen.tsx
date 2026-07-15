@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -9,7 +9,7 @@ import {
   Text,
   TextInput,
   View,
-} from "react-native";
+} from 'react-native';
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
@@ -392,7 +392,7 @@ export function BlockwiseScreen() {
       const commandable = robots.filter((robot) => robot.deveui && robot.robot_no);
 
       if (!commandable.length) {
-        Alert.alert(
+        appAlert(
           "No robots",
           `No robots with command details in ${blockName}.`,
         );
@@ -411,7 +411,7 @@ export function BlockwiseScreen() {
         robots: commandable,
       });
 
-      Alert.alert(
+      appAlert(
         "Command sent",
         result.message ||
           `${labels[command]} sent to ${commandable.length} robot${commandable.length === 1 ? "" : "s"}.`,
@@ -419,7 +419,7 @@ export function BlockwiseScreen() {
 
       void loadData(true);
     } catch (err) {
-      Alert.alert(
+      appAlert(
         "Command failed",
         err instanceof Error ? err.message : "Failed to send block commands",
       );
@@ -430,7 +430,7 @@ export function BlockwiseScreen() {
 
   const handleBulkCommand = (blockName: string, command: RobotCommand) => {
     if (!canSendCommands) {
-      Alert.alert("Access denied", "You do not have robot command access.");
+      appAlert("Access denied", "You do not have robot command access.");
       return;
     }
 
@@ -443,7 +443,7 @@ export function BlockwiseScreen() {
     const block = data?.blocks.find((item) => item.block_name === blockName);
     const robotCount = block?.total_robot_count ?? 0;
 
-    Alert.alert(
+    appAlert(
       `${labels[command]} · ${blockName}`,
       `Send ${labels[command].toLowerCase()} to robots in ${blockName}? (${robotCount} robots)`,
       [

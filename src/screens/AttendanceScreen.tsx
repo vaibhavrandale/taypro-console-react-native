@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Text,
   View,
-} from "react-native";
+} from 'react-native';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WebView } from "react-native-webview";
@@ -29,6 +29,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useLocationTracking } from "../context/LocationTrackingContext";
 import { requestBackgroundLocationForTracking } from "../services/technicianLocationTracking";
+import { requestAttendanceLocationPermissions } from "../utils/locationPermissions";
 import { useTheme } from "../theme";
 import { radius, spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
@@ -49,6 +50,21 @@ type UserLocation = {
 
 type PunchMode = "in" | "out" | null;
 
+/** Punch Out stays locked until 4 hours after punch-in. */
+const PUNCH_OUT_UNLOCK_MS = 4 * 60 * 60 * 1000;
+
+function formatPunchOutCountdown(remainingMs: number) {
+  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return [
+    String(hours).padStart(2, "0"),
+    String(minutes).padStart(2, "0"),
+    String(seconds).padStart(2, "0"),
+  ].join(":");
+}
+
 export function AttendanceScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
@@ -66,6 +82,7 @@ export function AttendanceScreen() {
   const [siteCoords, setSiteCoords] = useState<SiteCoordinates | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState("");
+  const [locationTip, setLocationTip] = useState("");
   const [coordsError, setCoordsError] = useState("");
   const [punchStatus, setPunchStatus] = useState<PunchStatus | null>(null);
   const [statusError, setStatusError] = useState("");
@@ -111,6 +128,29 @@ export function AttendanceScreen() {
     punchStatus?.punchedIn && punchStatus?.punchedOut,
   );
 
+  const punchInTime = punchStatus?.data?.punchin_time;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!showPunchOut || !punchInTime) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [showPunchOut, punchInTime]);
+
+  const punchOutGate = useMemo(() => {
+    if (!showPunchOut) {
+      return { unlocked: false, remainingMs: 0 };
+    }
+    const start = punchInTime ? Date.parse(punchInTime) : NaN;
+    // No usable punch-in time → don't trap the user behind a timer.
+    if (Number.isNaN(start)) {
+      return { unlocked: true, remainingMs: 0 };
+    }
+    const remainingMs = Math.max(0, PUNCH_OUT_UNLOCK_MS - (nowMs - start));
+    return { unlocked: remainingMs <= 0, remainingMs };
+  }, [showPunchOut, punchInTime, nowMs]);
+
   const mapHtml = useMemo(() => {
     if (!siteNumbers) return "";
     return buildAttendanceMapHtml(
@@ -153,11 +193,22 @@ export function AttendanceScreen() {
 
   const loadUserLocation = useCallback(async () => {
     setLocationError("");
-    const permission = await Location.requestForegroundPermissionsAsync();
-    if (!permission.granted) {
-      setLocationError("Location permission is required for attendance.");
+    setLocationTip("");
+    const permissions = await requestAttendanceLocationPermissions({
+      promptSettingsIfDenied: true,
+    });
+    if (!permissions.foreground) {
+      setLocationError(
+        "Location permission is required for attendance. Please allow location access.",
+      );
       setUserLocation(null);
       return;
+    }
+
+    if (!permissions.background) {
+      setLocationTip(
+        'For best results, set Location to “Allow all the time” while punched in.',
+      );
     }
 
     const position = await Location.getCurrentPositionAsync({
@@ -234,6 +285,7 @@ export function AttendanceScreen() {
     setStatusError("");
     setCoordsError("");
     setLocationError("");
+    setLocationTip("");
     setUserLocation(null);
     setPunchMode(null);
   }, [userId]);
@@ -290,7 +342,7 @@ export function AttendanceScreen() {
   const handlePunchUploaded = useCallback(
     async (imageUrl: string) => {
       if (!userLocation) {
-        Alert.alert(
+        appAlert(
           "Location missing",
           "Could not read your current location.",
         );
@@ -306,14 +358,14 @@ export function AttendanceScreen() {
             lat: userLocation.lat,
             lng: userLocation.lng,
           });
-          Alert.alert("Punch In", message);
+          appAlert("Punch In", message);
         } else if (punchMode === "out") {
           const message = await punchOut({
             punchOutImage: imageUrl,
             lat: userLocation.lat,
             lng: userLocation.lng,
           });
-          Alert.alert("Punch Out", message);
+          appAlert("Punch Out", message);
         }
         await loadPunchStatus();
         await refreshTrackingState();
@@ -321,7 +373,7 @@ export function AttendanceScreen() {
           void requestBackgroundLocationForTracking();
         }
       } catch (err) {
-        Alert.alert(
+        appAlert(
           "Attendance failed",
           err instanceof Error ? err.message : "Could not complete punch",
         );
@@ -472,6 +524,17 @@ export function AttendanceScreen() {
                 </Text>
               )}
 
+              {locationTip ? (
+                <Text
+                  style={[
+                    styles.locationTip,
+                    { color: colors.badge.warning.text },
+                  ]}
+                >
+                  {locationTip}
+                </Text>
+              ) : null}
+
               {coordsError ? (
                 <Text style={[styles.errorText, { color: colors.danger }]}>
                   {coordsError}
@@ -576,7 +639,7 @@ export function AttendanceScreen() {
                 </Text>
               ) : null}
 
-              <LocationSyncStatusCard visible={showPunchOut} />
+              <LocationSyncStatusCard visible />
 
               {punchInLocation?.lat != null &&
               punchInLocation?.lng != null &&
@@ -729,17 +792,54 @@ export function AttendanceScreen() {
                     />
                   </View>
                 ) : showPunchOut ? (
-                  <Button
-                    title="Punch Out"
-                    variant="danger"
-                    icon="log-out-outline"
-                    onPress={() => setPunchMode("out")}
-                    disabled={
-                      !isInside || !userLocation || submitting || loading
-                    }
-                    loading={submitting}
-                    fullWidth
-                  />
+                  punchOutGate.unlocked ? (
+                    <Button
+                      title="Punch Out"
+                      variant="danger"
+                      icon="log-out-outline"
+                      onPress={() => setPunchMode("out")}
+                      disabled={
+                        !isInside || !userLocation || submitting || loading
+                      }
+                      loading={submitting}
+                      fullWidth
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.punchOutTimer,
+                        {
+                          backgroundColor: colors.backgroundTertiary,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.punchOutTimerLabel,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Punch out unlocks in
+                      </Text>
+                      <Text
+                        style={[
+                          styles.punchOutTimerValue,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {formatPunchOutCountdown(punchOutGate.remainingMs)}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.punchOutTimerHint,
+                          { color: colors.textMuted },
+                        ]}
+                      >
+                        Available 4 hours after punch in
+                      </Text>
+                    </View>
+                  )
                 ) : (
                   <Button
                     title="Punch In"
@@ -858,6 +958,12 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 11,
   },
+  locationTip: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: "600",
+  },
   errorText: {
     ...typography.caption,
     fontSize: 11,
@@ -904,6 +1010,34 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     marginTop: spacing.sm,
+  },
+  punchOutTimer: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  punchOutTimerLabel: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  punchOutTimerValue: {
+    fontSize: 36,
+    lineHeight: 42,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 1,
+  },
+  punchOutTimerHint: {
+    ...typography.caption,
+    fontSize: 11,
+    textAlign: "center",
   },
   completedBadge: {
     width: "100%",

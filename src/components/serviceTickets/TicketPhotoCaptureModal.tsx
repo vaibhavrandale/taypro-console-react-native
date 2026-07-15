@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { uploadUserImage } from '../../api/imageUpload';
+import { uploadServiceTicketImage } from '../../api/imageUpload';
 import { useStatusBarOverlay } from '../../context/StatusBarOverlayContext';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
@@ -22,10 +22,10 @@ type Props = {
   visible: boolean;
   title: string;
   onClose: () => void;
-  onUploaded: (imageUrl: string) => Promise<void>;
+  onUploaded: (imageUrl: string) => Promise<void> | void;
 };
 
-export function PunchCaptureModal({
+export function TicketPhotoCaptureModal({
   visible,
   title,
   onClose,
@@ -53,15 +53,12 @@ export function PunchCaptureModal({
 
   const capturePhoto = useCallback(async () => {
     if (!cameraRef.current || !cameraReady) return;
-
     try {
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
         skipProcessing: false,
       });
-      if (photo?.uri) {
-        setCapturedUri(photo.uri);
-      }
+      if (photo?.uri) setCapturedUri(photo.uri);
     } catch {
       appAlert('Capture failed', 'Could not take photo. Please try again.');
     }
@@ -69,10 +66,9 @@ export function PunchCaptureModal({
 
   const confirmPhoto = useCallback(async () => {
     if (!capturedUri) return;
-
     setUploading(true);
     try {
-      const imageUrl = await uploadUserImage(capturedUri);
+      const imageUrl = await uploadServiceTicketImage(capturedUri);
       await onUploaded(imageUrl);
       handleClose();
     } catch (err) {
@@ -85,9 +81,7 @@ export function PunchCaptureModal({
     }
   }, [capturedUri, onUploaded, handleClose]);
 
-  if (!visible) {
-    return null;
-  }
+  if (!visible) return null;
 
   return (
     <Modal
@@ -107,34 +101,49 @@ export function PunchCaptureModal({
           ]}
         >
           <View style={styles.headerText}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>{title}</Text>
+            <Text style={[styles.title, { color: colors.textPrimary }]}>
+              {title}
+            </Text>
             <Text style={[styles.subtitle, { color: colors.textMuted }]}>
-              Face the camera clearly for attendance
+              Use the back camera for clear ticket photos
             </Text>
           </View>
-          <Pressable onPress={handleClose} hitSlop={10} style={styles.closeButton}>
+          <Pressable onPress={handleClose} hitSlop={10}>
             <Ionicons name="close" size={22} color={colors.textPrimary} />
           </Pressable>
         </View>
 
         <View style={styles.body}>
           {capturedUri ? (
-            <Image source={{ uri: capturedUri }} style={styles.preview} resizeMode="contain" />
+            <Image
+              source={{ uri: capturedUri }}
+              style={styles.preview}
+              resizeMode="contain"
+            />
           ) : !permission?.granted ? (
             <View style={styles.permissionState}>
-              <Ionicons name="camera-outline" size={40} color={colors.textMuted} />
-              <Text style={[styles.permissionText, { color: colors.textSecondary }]}>
-                Camera access is required for punch in/out.
+              <Ionicons
+                name="camera-outline"
+                size={40}
+                color={colors.textMuted}
+              />
+              <Text
+                style={[styles.permissionText, { color: colors.textSecondary }]}
+              >
+                Camera access is required for ticket photos.
               </Text>
-              <Button title="Allow Camera" onPress={() => void requestPermission()} size="sm" />
+              <Button
+                title="Allow Camera"
+                onPress={() => void requestPermission()}
+                size="sm"
+              />
             </View>
           ) : (
             <View style={[styles.cameraWrap, { borderColor: colors.border }]}>
               <CameraView
                 ref={cameraRef}
                 style={styles.camera}
-                facing="front"
-                mirror
+                facing="back"
                 onCameraReady={() => setCameraReady(true)}
               />
             </View>
@@ -200,16 +209,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
   },
   headerText: { flex: 1, gap: 2 },
   title: { ...typography.label, fontSize: 16, fontWeight: '700' },
   subtitle: { ...typography.caption, fontSize: 11 },
-  closeButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   body: {
     flex: 1,
     padding: spacing.lg,
