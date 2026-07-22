@@ -13,7 +13,7 @@ import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { Badge } from '../ui/Badge';
 import { Logo } from '../ui/Logo';
-import { canAccessAttendance, canSubmitDpr } from '../../utils/roles';
+import { canAccessAttendance, canAccessExpenses, canAccessPreventiveMaintenance, canSubmitDpr } from '../../utils/roles';
 
 export type DrawerRoute = {
   name: string;
@@ -79,6 +79,11 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         icon: 'stats-chart-outline',
       },
       {
+        name: 'RobotActivity',
+        label: 'Robot Commands',
+        icon: 'hardware-chip-outline',
+      },
+      {
         name: 'Timers',
         label: 'Timers',
         icon: 'timer-outline',
@@ -121,9 +126,37 @@ function buildMenuSections(role?: string): MenuSection[] {
     });
   }
 
+  const managementItems = [...BASE_MENU_SECTIONS[2].items];
+  if (canAccessPreventiveMaintenance(role)) {
+    const ticketsIndex = managementItems.findIndex(
+      (item) => item.name === 'ServiceTickets',
+    );
+    managementItems.splice(ticketsIndex + 1, 0, {
+      name: 'PreventiveMaintenance',
+      label: 'Preventive Maintenance',
+      icon: 'build-outline',
+    });
+  }
+
+  if (canAccessExpenses(role)) {
+    const pmIndex = managementItems.findIndex(
+      (item) => item.name === 'PreventiveMaintenance',
+    );
+    const ticketsIndex = managementItems.findIndex(
+      (item) => item.name === 'ServiceTickets',
+    );
+    const insertAt = (pmIndex >= 0 ? pmIndex : ticketsIndex) + 1;
+    managementItems.splice(insertAt, 0, {
+      name: 'ExpenseClaims',
+      label: 'Expense Claims',
+      icon: 'wallet-outline',
+    });
+  }
+
   return [
     { title: 'Main', items: mainItems },
-    ...BASE_MENU_SECTIONS.slice(1),
+    BASE_MENU_SECTIONS[1],
+    { title: 'Management', items: managementItems },
   ];
 }
 

@@ -3,6 +3,8 @@ import type { MainTabParamList } from './MainTabs';
 import type { SitesStackParamList } from './SitesStack';
 import type { TimersStackParamList } from './TimersStack';
 import type { ServiceTicketsStackParamList } from './ServiceTicketsStack';
+import type { PreventiveMaintenanceStackParamList } from './PreventiveMaintenanceStack';
+import type { ExpenseClaimsStackParamList } from './ExpenseClaimsStack';
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
@@ -48,5 +50,7 @@ export type DrawerParamList = {
   Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;
   ServiceTickets: NavigatorScreenParams<ServiceTicketsStackParamList> | undefined;
+  PreventiveMaintenance: NavigatorScreenParams<PreventiveMaintenanceStackParamList> | undefined;
+  ExpenseClaims: NavigatorScreenParams<ExpenseClaimsStackParamList> | undefined;
   Settings: undefined;
 };

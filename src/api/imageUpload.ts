@@ -1,6 +1,10 @@
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../config/api';
 import { getAuthToken } from './client';
+import {
+  isSessionExpiredPayload,
+  notifySessionExpired,
+} from '../utils/sessionExpiry';
 
 const UPLOAD_TIMEOUT_MS = 60_000;
 
@@ -26,13 +30,14 @@ function normalizeUploadUri(uri: string) {
 async function uploadImageToPath(
   localUri: string,
   path: string,
+  options?: { type?: string; name?: string },
 ): Promise<string> {
   const token = await getAuthToken();
   const form = new FormData();
   form.append('file', {
     uri: normalizeUploadUri(localUri),
-    type: 'image/jpeg',
-    name: 'captured.jpg',
+    type: options?.type ?? 'image/jpeg',
+    name: options?.name ?? 'captured.jpg',
   } as unknown as Blob);
 
   return new Promise((resolve, reject) => {
@@ -55,6 +60,12 @@ async function uploadImageToPath(
 
       if (xhr.status < 200 || xhr.status >= 300) {
         const errorPayload = isRecord(payload) ? payload : {};
+        if (
+          xhr.status === 401 ||
+          isSessionExpiredPayload(errorPayload)
+        ) {
+          notifySessionExpired();
+        }
         reject(
           new Error(
             String(errorPayload.error ?? errorPayload.message ?? 'Upload failed'),
@@ -100,4 +111,40 @@ export async function uploadServiceTicketImage(
   localUri: string,
 ): Promise<string> {
   return uploadImageToPath(localUri, '/image-upload/service-tickets');
+}
+
+export async function uploadPreventiveMaintenanceImage(
+  localUri: string,
+): Promise<string> {
+  // API path spelling matches backend (maintanance).
+  return uploadImageToPath(localUri, '/image-upload/preventive-maintanance');
+}
+
+function guessMimeAndName(uri: string, mimeType?: string | null) {
+  const path = uri.split('?')[0].toLowerCase();
+  if (mimeType) {
+    const ext =
+      mimeType === 'application/pdf'
+        ? 'pdf'
+        : mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'bin';
+    return { type: mimeType, name: `expense-claim.${ext}` };
+  }
+  if (path.endsWith('.pdf')) {
+    return { type: 'application/pdf', name: 'expense-claim.pdf' };
+  }
+  if (path.endsWith('.png')) {
+    return { type: 'image/png', name: 'expense-claim.png' };
+  }
+  return { type: 'image/jpeg', name: 'expense-claim.jpg' };
+}
+
+export async function uploadExpenseClaimFile(
+  localUri: string,
+  mimeType?: string | null,
+): Promise<string> {
+  return uploadImageToPath(
+    localUri,
+    '/image-upload/expense-claim',
+    guessMimeAndName(localUri, mimeType),
+  );
 }

@@ -11,9 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DprRecordCard } from '../components/dpr/DprRecordCard';
@@ -195,16 +193,7 @@ export function AssignedSitesDprScreen() {
     setPickerDate(new Date(`${field === 'start' ? startDate : endDate}T12:00:00`));
   };
 
-  const onDateChange = (event: DateTimePickerEvent, picked?: Date) => {
-    if (Platform.OS === 'android') {
-      setDateField(null);
-    }
-
-    if (event.type === 'dismissed') {
-      setDateField(null);
-      return;
-    }
-
+  const applyPickedDate = (picked?: Date) => {
     if (!picked || !dateField) return;
 
     const next = toDateInputValue(picked);
@@ -445,7 +434,7 @@ export function AssignedSitesDprScreen() {
                 value={pickerDate}
                 mode="date"
                 display="spinner"
-                onChange={onDateChange}
+                onValueChange={(_event, picked) => applyPickedDate(picked)}
                 themeVariant={isDark ? 'dark' : 'light'}
               />
             </View>
@@ -458,7 +447,11 @@ export function AssignedSitesDprScreen() {
           value={pickerDate}
           mode="date"
           display="default"
-          onChange={onDateChange}
+          onValueChange={(_event, picked) => {
+            applyPickedDate(picked);
+            setDateField(null);
+          }}
+          onDismiss={() => setDateField(null)}
         />
       ) : null}
     </View>

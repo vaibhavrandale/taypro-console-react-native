@@ -52,7 +52,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Nectyr to access your camera to capture profile photos and attendance."
+          "cameraPermission": "Allow Nectyr to access your camera for profile photos, attendance, and preventive maintenance."
         }
       ],
       [

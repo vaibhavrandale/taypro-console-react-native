@@ -17,6 +17,7 @@ import {
   USER_STORAGE_KEY,
   clearAllSessionData,
 } from "../utils/sessionStorage";
+import { setSessionExpiredHandler } from "../utils/sessionExpiry";
 
 type AuthContextValue = {
   user: User | null;
@@ -65,6 +66,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     await clearAllSessionData();
   }, []);
+
+  useEffect(() => {
+    // Token/session invalid → drop local user so AppNavigator shows Login.
+    setSessionExpiredHandler(() => {
+      void clearStoredSession();
+    });
+    return () => setSessionExpiredHandler(null);
+  }, [clearStoredSession]);
 
   useEffect(() => {
     (async () => {

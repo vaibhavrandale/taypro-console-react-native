@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -7,25 +7,25 @@ import {
   StyleSheet,
   Text,
   View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Navbar } from '../components/layout';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Navbar } from "../components/layout";
 import {
   RobotBatteryTableHeader,
   RobotBatteryTableRow,
-} from '../components/robots/RobotBatteryTableRow';
-import { Button, Input } from '../components/ui';
-import { fetchBlockWiseRobotsBySite } from '../api/blockWiseRobots';
-import { useSiteDetails } from '../context/SiteDetailsContext';
-import { useTheme } from '../theme';
-import { radius, spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import { BlockRobot, SiteManagementData } from '../types/blockWiseRobots';
+} from "../components/robots/RobotBatteryTableRow";
+import { Button, Input } from "../components/ui";
+import { fetchBlockWiseRobotsBySite } from "../api/blockWiseRobots";
+import { useSiteDetails } from "../context/SiteDetailsContext";
+import { useTheme } from "../theme";
+import { radius, spacing } from "../theme/spacing";
+import { typography } from "../theme/typography";
+import { BlockRobot, SiteManagementData } from "../types/blockWiseRobots";
 import {
   getBatteryPercent,
   isRobotOnline,
   sortRobotsForDisplay,
-} from '../utils/robot';
+} from "../utils/robot";
 
 function SummaryStrip({
   avgBattery,
@@ -42,13 +42,13 @@ function SummaryStrip({
 
   const items = [
     {
-      label: 'Avg Battery',
-      value: avgBattery != null ? `${avgBattery}%` : '—',
+      label: "Avg Battery",
+      value: avgBattery != null ? `${avgBattery}%` : "—",
       color: colors.badge.info.text,
     },
-    { label: 'Online', value: String(online), color: colors.primary },
-    { label: 'Low', value: String(lowBattery), color: colors.danger },
-    { label: 'Total', value: String(total), color: colors.textPrimary },
+    { label: "Online", value: String(online), color: colors.primary },
+    { label: "Low", value: String(lowBattery), color: colors.danger },
+    { label: "Total", value: String(total), color: colors.textPrimary },
   ];
 
   return (
@@ -65,7 +65,10 @@ function SummaryStrip({
         <React.Fragment key={item.label}>
           {index > 0 ? (
             <View
-              style={[styles.summaryDivider, { backgroundColor: colors.border }]}
+              style={[
+                styles.summaryDivider,
+                { backgroundColor: colors.border },
+              ]}
             />
           ) : null}
           <View style={styles.summaryCell}>
@@ -89,8 +92,8 @@ export function RobotsScreen() {
   const [data, setData] = useState<SiteManagementData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   const loadRobots = useCallback(async (siteId: string, isRefresh = false) => {
     if (isRefresh) {
@@ -98,14 +101,14 @@ export function RobotsScreen() {
     } else {
       setLoading(true);
     }
-    setError('');
+    setError("");
 
     try {
       const result = await fetchBlockWiseRobotsBySite(siteId);
       setData(result);
     } catch (err) {
       setData(null);
-      setError(err instanceof Error ? err.message : 'Failed to load robots');
+      setError(err instanceof Error ? err.message : "Failed to load robots");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -144,9 +147,13 @@ export function RobotsScreen() {
       .filter((value): value is number => value != null);
     const avgBattery =
       batteries.length > 0
-        ? Math.round(batteries.reduce((sum, value) => sum + value, 0) / batteries.length)
+        ? Math.round(
+            batteries.reduce((sum, value) => sum + value, 0) / batteries.length,
+          )
         : null;
-    const online = allRobots.filter((robot) => isRobotOnline(robot.lora_state)).length;
+    const online = allRobots.filter((robot) =>
+      isRobotOnline(robot.lora_state),
+    ).length;
     const lowBattery = allRobots.filter((robot) => {
       const percent = getBatteryPercent(robot.battery_voltage);
       return percent != null && percent < 40;
@@ -168,8 +175,8 @@ export function RobotsScreen() {
     if (query) {
       robots = robots.filter((robot) => {
         const robotNo = robot.robot_no.toLowerCase();
-        const block = (robot.block ?? '').toLowerCase();
-        const status = (robot.last_status ?? '').toLowerCase();
+        const block = (robot.block ?? "").toLowerCase();
+        const status = (robot.last_status ?? "").toLowerCase();
         return (
           robotNo.includes(query) ||
           block.includes(query) ||
@@ -183,7 +190,13 @@ export function RobotsScreen() {
     ) as BlockRobot[];
   }, [allRobots, search]);
 
-  const renderRobot = ({ item, index }: { item: BlockRobot; index: number }) => (
+  const renderRobot = ({
+    item,
+    index,
+  }: {
+    item: BlockRobot;
+    index: number;
+  }) => (
     <View
       style={[
         styles.tableRowShell,
@@ -210,7 +223,9 @@ export function RobotsScreen() {
                 style={[
                   styles.siteChip,
                   {
-                    backgroundColor: active ? colors.primary : colors.backgroundTertiary,
+                    backgroundColor: active
+                      ? colors.primary
+                      : colors.backgroundTertiary,
                     borderColor: active ? colors.primary : colors.border,
                   },
                 ]}
@@ -218,11 +233,11 @@ export function RobotsScreen() {
                 <Text
                   style={[
                     styles.siteChipText,
-                    { color: active ? '#101936' : colors.textPrimary },
+                    { color: active ? "#101936" : colors.textPrimary },
                   ]}
                   numberOfLines={1}
                 >
-                  {site.site_name || site.site_id}
+                  {site.site_id}
                 </Text>
               </Pressable>
             );
@@ -232,11 +247,16 @@ export function RobotsScreen() {
 
       {data ? (
         <>
-          <Text style={[styles.siteTitle, { color: colors.primary }]} numberOfLines={2}>
+          <Text
+            style={[styles.siteTitle, { color: colors.primary }]}
+            numberOfLines={2}
+          >
             {data.site_name}
           </Text>
           {data.location ? (
-            <Text style={[styles.siteLocation, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.siteLocation, { color: colors.textSecondary }]}
+            >
               {data.location}
             </Text>
           ) : null}
@@ -262,7 +282,9 @@ export function RobotsScreen() {
         </View>
         <Button
           title="Refresh"
-          onPress={() => selectedSite?.site_id && loadRobots(selectedSite.site_id, true)}
+          onPress={() =>
+            selectedSite?.site_id && loadRobots(selectedSite.site_id, true)
+          }
           icon="refresh-outline"
           size="sm"
           variant="outline"
@@ -291,7 +313,7 @@ export function RobotsScreen() {
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <Navbar
         title="Robot Battery"
-        subtitle={selectedSite?.site_name || selectedSite?.site_id || 'Fleet'}
+        subtitle={selectedSite?.site_id || "Fleet"}
       />
 
       {assignedSites.length === 0 ? (
@@ -310,10 +332,14 @@ export function RobotsScreen() {
       ) : error ? (
         <View style={styles.centerState}>
           <Ionicons name="alert-circle" size={28} color={colors.danger} />
-          <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+          <Text style={[styles.errorText, { color: colors.danger }]}>
+            {error}
+          </Text>
           <Button
             title="Retry"
-            onPress={() => selectedSite?.site_id && loadRobots(selectedSite.site_id)}
+            onPress={() =>
+              selectedSite?.site_id && loadRobots(selectedSite.site_id)
+            }
             variant="outline"
           />
         </View>
@@ -332,7 +358,9 @@ export function RobotsScreen() {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => selectedSite?.site_id && loadRobots(selectedSite.site_id, true)}
+              onRefresh={() =>
+                selectedSite?.site_id && loadRobots(selectedSite.site_id, true)
+              }
               tintColor={colors.primary}
               colors={[colors.primary]}
             />
@@ -362,8 +390,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sitePickerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
   siteChip: {
@@ -374,28 +402,28 @@ const styles = StyleSheet.create({
   },
   siteChipText: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   siteTitle: {
     ...typography.h3,
-    textAlign: 'center',
+    textAlign: "center",
   },
   siteLocation: {
     ...typography.bodySmall,
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: -spacing.xs,
   },
   summaryStrip: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    flexDirection: "row",
+    alignItems: "stretch",
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   summaryCell: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     paddingVertical: spacing.sm,
     gap: 2,
   },
@@ -406,17 +434,17 @@ const styles = StyleSheet.create({
   summaryValue: {
     ...typography.label,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   summaryLabel: {
     ...typography.caption,
     fontSize: 9,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
     letterSpacing: 0.2,
   },
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing.sm,
   },
   searchInputWrap: {
@@ -433,13 +461,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     borderTopLeftRadius: radius.md,
     borderTopRightRadius: radius.md,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   tableRowShell: {
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   listContent: {
     paddingHorizontal: spacing.md,
@@ -450,8 +478,8 @@ const styles = StyleSheet.create({
   },
   centerState: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
     padding: spacing.xl,
   },
@@ -460,11 +488,11 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.bodySmall,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyText: {
     ...typography.bodySmall,
-    textAlign: 'center',
+    textAlign: "center",
     padding: spacing.xl,
   },
 });

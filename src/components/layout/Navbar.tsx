@@ -19,9 +19,11 @@ type Props = {
   showThemeToggle?: boolean;
   showSearch?: boolean;
   showNotifications?: boolean;
+  showRobotActivity?: boolean;
   notificationCount?: number;
   onThemeToggle?: () => void;
   onNotificationsPress?: () => void;
+  onRobotActivityPress?: () => void;
   leftAction?: React.ReactNode;
 };
 
@@ -33,9 +35,11 @@ export function Navbar({
   showThemeToggle = true,
   showSearch = true,
   showNotifications = true,
+  showRobotActivity = true,
   notificationCount,
   onThemeToggle,
   onNotificationsPress,
+  onRobotActivityPress,
   leftAction,
 }: Props) {
   const { colors, isDark, toggleTheme } = useTheme();
@@ -47,6 +51,12 @@ export function Navbar({
   const handleThemeToggle = onThemeToggle ?? toggleTheme;
   const badgeCount = notificationCount ?? unreadCount;
   const handleNotificationsPress = onNotificationsPress ?? openNotification;
+  const handleRobotActivityPress =
+    onRobotActivityPress ??
+    (() => {
+      // Drawer sibling route — works from tabs and nested stacks.
+      navigation.navigate('RobotActivity' as never);
+    });
 
   return (
     <View style={{ backgroundColor: colors.navbar }}>
@@ -97,6 +107,24 @@ export function Navbar({
         </View>
 
         <View style={styles.actions}>
+          {showRobotActivity ? (
+            <Pressable
+              onPress={handleRobotActivityPress}
+              style={[
+                styles.iconButton,
+                { backgroundColor: colors.backgroundTertiary },
+              ]}
+              hitSlop={6}
+              accessibilityLabel="Robot commands"
+            >
+              <Ionicons
+                name="hardware-chip-outline"
+                size={16}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          ) : null}
+
           {showSearch ? (
             <Pressable
               onPress={openSearch}

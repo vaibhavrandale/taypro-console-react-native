@@ -17,7 +17,10 @@ import { MainTabs } from './MainTabs';
 import { SitesStack } from './SitesStack';
 import { TimersStack } from './TimersStack';
 import { ServiceTicketsStack } from './ServiceTicketsStack';
+import { PreventiveMaintenanceStack } from './PreventiveMaintenanceStack';
+import { ExpenseClaimsStack } from './ExpenseClaimsStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
+import { RobotActivityScreen } from '../screens/RobotActivityScreen';
 import { BlockwiseScreen } from '../screens/BlockwiseScreen';
 import { BlockManagementScreen } from '../screens/BlockManagementScreen';
 import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
@@ -51,6 +54,11 @@ function MainDrawer() {
       <Drawer.Screen name="MainTabs" component={MainTabs} options={{ title: 'Home' }} />
       <Drawer.Screen name="Robots" component={RobotsScreen} />
       <Drawer.Screen
+        name="RobotActivity"
+        component={RobotActivityScreen}
+        options={{ title: 'Robot Commands' }}
+      />
+      <Drawer.Screen
         name="Blockwise"
         component={BlockwiseScreen}
         options={{ drawerItemStyle: { display: 'none' } }}
@@ -83,6 +91,11 @@ function MainDrawer() {
         )}
       </Drawer.Screen>
       <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
+      <Drawer.Screen
+        name="PreventiveMaintenance"
+        component={PreventiveMaintenanceStack}
+      />
+      <Drawer.Screen name="ExpenseClaims" component={ExpenseClaimsStack} />
       <Drawer.Screen name="Settings">
         {() => (
           <PlaceholderScreen

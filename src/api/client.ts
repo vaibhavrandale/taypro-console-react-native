@@ -1,6 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../config/api';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
+import {
+  isSessionExpiredPayload,
+  notifySessionExpired,
+} from '../utils/sessionExpiry';
 
 const TOKEN_STORAGE_KEY = 'taypro_auth_token';
 
@@ -14,6 +18,24 @@ export async function setAuthToken(token: string): Promise<void> {
 
 export async function clearAuthToken(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
+}
+
+async function checkSessionExpired(response: Response): Promise<void> {
+  if (response.status === 401) {
+    notifySessionExpired();
+    return;
+  }
+
+  if (response.ok) return;
+
+  try {
+    const payload: unknown = await response.clone().json();
+    if (isSessionExpiredPayload(payload)) {
+      notifySessionExpired();
+    }
+  } catch {
+    // Non-JSON error body — ignore.
+  }
 }
 
 export async function apiFetch(
@@ -31,10 +53,13 @@ export async function apiFetch(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  return fetchWithTimeout(`${API_BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
     // Avoid stale server session cookies overriding the Bearer JWT.
     credentials: 'omit',
   });
+
+  await checkSessionExpired(response);
+  return response;
 }

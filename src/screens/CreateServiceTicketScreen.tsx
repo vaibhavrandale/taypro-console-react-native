@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Navbar } from '../components/layout';
 import { Badge, Button } from '../components/ui';
 import { TicketPhotoCaptureModal } from '../components/serviceTickets/TicketPhotoCaptureModal';
@@ -43,6 +44,7 @@ type Navigation = NativeStackNavigationProp<
 export function CreateServiceTicketScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<Navigation>();
+  const insets = useSafeAreaInsets();
 
   const [robots, setRobots] = useState<ServiceTicketRobot[]>([]);
   const [faults, setFaults] = useState<ServiceTicketFault[]>([]);
@@ -205,7 +207,10 @@ export function CreateServiceTicketScreen() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: insets.bottom + spacing.xxl + spacing.md },
+          ]}
           keyboardShouldPersistTaps="handled"
         >
           {error ? (
@@ -438,7 +443,6 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.md,
     gap: spacing.md,
-    paddingBottom: spacing.xl,
   },
   centered: {
     flex: 1,

@@ -12,9 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import {
   useNavigation,
   useRoute,
@@ -146,16 +144,7 @@ export function UpdateTimerScreen() {
     setPickerTarget(key);
   };
 
-  const onPickerChange = (event: DateTimePickerEvent, picked?: Date) => {
-    if (Platform.OS === 'android') {
-      setPickerTarget(null);
-    }
-
-    if (event.type === 'dismissed') {
-      setPickerTarget(null);
-      return;
-    }
-
+  const applyPickedValue = (picked?: Date) => {
     if (!picked || !pickerTarget) return;
 
     if (
@@ -375,7 +364,11 @@ export function UpdateTimerScreen() {
           value={pickerDate}
           mode={isTimePicker ? 'time' : 'date'}
           display="default"
-          onChange={onPickerChange}
+          onValueChange={(_event, picked) => {
+            applyPickedValue(picked);
+            setPickerTarget(null);
+          }}
+          onDismiss={() => setPickerTarget(null)}
           is24Hour={false}
         />
       ) : null}
@@ -414,7 +407,7 @@ export function UpdateTimerScreen() {
               value={pickerDate}
               mode={isTimePicker ? 'time' : 'date'}
               display="spinner"
-              onChange={onPickerChange}
+              onValueChange={(_event, picked) => applyPickedValue(picked)}
               themeVariant={isDark ? 'dark' : 'light'}
               is24Hour={false}
             />
