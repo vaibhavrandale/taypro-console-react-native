@@ -27,6 +27,7 @@ import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
 import { GatewayDetailScreen } from '../screens/GatewayDetailScreen';
 import { GatewaysScreen } from '../screens/GatewaysScreen';
 import { RobotUptimeScreen } from '../screens/RobotUptimeScreen';
+import { ServiceInventoryScreen } from '../screens/ServiceInventoryScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
 import { TimerExecutionNotificationModal } from '../components/notifications/TimerExecutionNotificationModal';
@@ -91,6 +92,11 @@ function MainDrawer() {
         )}
       </Drawer.Screen>
       <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
+      <Drawer.Screen
+        name="ServiceInventory"
+        component={ServiceInventoryScreen}
+        options={{ title: 'Service Inventory' }}
+      />
       <Drawer.Screen
         name="PreventiveMaintenance"
         component={PreventiveMaintenanceStack}

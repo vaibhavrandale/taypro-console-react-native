@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { appAlert } from '../utils/appAlert';
+import React, { useMemo, useState } from "react";
+import { appAlert } from "../utils/appAlert";
 import {
   Modal,
   Platform,
@@ -9,29 +9,29 @@ import {
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Navbar } from '../components/layout';
-import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
-import { Button } from '../components/ui';
-import { createExpenseClaim } from '../api/expenseClaims';
-import { uploadExpenseClaimFile } from '../api/imageUpload';
-import { useAuth } from '../context/AuthContext';
-import type { ExpenseClaimsStackParamList } from '../navigation/ExpenseClaimsStack';
-import { useTheme } from '../theme';
-import { radius, spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import { formatDisplayDate, toDateInputValue } from '../utils/dprHistory';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Navbar } from "../components/layout";
+import { UptimeSelectField } from "../components/robotUptime/UptimeSelectField";
+import { Button } from "../components/ui";
+import { createExpenseClaim } from "../api/expenseClaims";
+import { uploadExpenseClaimFile } from "../api/imageUpload";
+import { useAuth } from "../context/AuthContext";
+import type { ExpenseClaimsStackParamList } from "../navigation/ExpenseClaimsStack";
+import { useTheme } from "../theme";
+import { radius, spacing } from "../theme/spacing";
+import { typography } from "../theme/typography";
+import { formatDisplayDate, toDateInputValue } from "../utils/dprHistory";
 
 type Navigation = NativeStackNavigationProp<
   ExpenseClaimsStackParamList,
-  'ExpensesCreate'
+  "ExpensesCreate"
 >;
 
 type LocalFile = {
@@ -52,22 +52,22 @@ type ExpenseItemDraft = {
   localFile?: LocalFile | null;
 };
 
-const EXPENSE_TYPES = ['Food', 'Travel', 'Medical', 'Others'] as const;
+const EXPENSE_TYPES = ["Food", "Travel", "Medical", "Others"] as const;
 
 const VISIT_OPTIONS = [
-  { value: '', label: 'Select department of visit' },
-  { value: 'project', label: 'Project' },
-  { value: 'service', label: 'Service' },
+  { value: "", label: "Select department of visit" },
+  { value: "Projects - TAYPRO", label: "Projects" },
+  { value: "Field Service - TAYPRO", label: "Service" },
 ];
 
-const COST_CENTER_OPTIONS = [{ value: 'Main - TPL', label: 'Main' }];
+const COST_CENTER_OPTIONS = [{ value: "Main - TAYPRO", label: "Main" }];
 
 const ALLOWANCE_ROWS = [
-  ['Food', '₹500'],
-  ['Stay', '₹1,000'],
-  ['Travel', '₹1,000'],
-  ['Other', '₹110'],
-  ['Total Per Day', '₹2,610'],
+  ["Food", "₹500"],
+  ["Stay", "₹1,000"],
+  ["Travel", "₹1,000"],
+  ["Other", "₹110"],
+  ["Total Per Day", "₹2,610"],
 ] as const;
 
 const MAX_FILE_BYTES = 1 * 1024 * 1024;
@@ -77,11 +77,11 @@ function emptyItem(costCenter: string): ExpenseItemDraft {
   return {
     expense_date: today,
     cost_center: costCenter,
-    expense_type: '',
-    description: '',
-    amount: '',
-    sanctioned_amount: '',
-    default_account: '',
+    expense_type: "",
+    description: "",
+    amount: "",
+    sanctioned_amount: "",
+    default_account: "",
     localFile: null,
   };
 }
@@ -99,15 +99,13 @@ export function CreateExpenseClaimScreen() {
   const [limitsVisible, setLimitsVisible] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [postingDate, setPostingDate] = useState(toDateInputValue(new Date()));
-  const [departmentOfVisit, setDepartmentOfVisit] = useState('');
-  const [costCenter, setCostCenter] = useState('Main - TPL');
+  const [departmentOfVisit, setDepartmentOfVisit] = useState("");
+  const [costCenter, setCostCenter] = useState("Main - TAYPRO");
   const [items, setItems] = useState<ExpenseItemDraft[]>([
-    emptyItem('Main - TPL'),
+    emptyItem("Main - TAYPRO"),
   ]);
   const [datePicker, setDatePicker] = useState<
-    | { kind: 'posting' }
-    | { kind: 'item'; index: number }
-    | null
+    { kind: "posting" } | { kind: "item"; index: number } | null
   >(null);
   const [pickerDate, setPickerDate] = useState(new Date());
 
@@ -126,23 +124,23 @@ export function CreateExpenseClaimScreen() {
 
   const openPostingDate = () => {
     setPickerDate(new Date(`${postingDate}T12:00:00`));
-    setDatePicker({ kind: 'posting' });
+    setDatePicker({ kind: "posting" });
   };
 
   const openItemDate = (index: number) => {
     setPickerDate(new Date(`${items[index].expense_date}T12:00:00`));
-    setDatePicker({ kind: 'item', index });
+    setDatePicker({ kind: "item", index });
   };
 
   const applyPickedDate = (picked?: Date) => {
     if (!picked || !datePicker) return;
     const next = toDateInputValue(picked);
-    if (datePicker.kind === 'posting') {
+    if (datePicker.kind === "posting") {
       setPostingDate(next);
     } else {
       updateItem(datePicker.index, { expense_date: next });
     }
-    if (Platform.OS === 'ios') setPickerDate(picked);
+    if (Platform.OS === "ios") setPickerDate(picked);
   };
 
   const isDuplicateType = (
@@ -173,8 +171,8 @@ export function CreateExpenseClaimScreen() {
         isDuplicateType(index, nextDate, nextType, prev)
       ) {
         appAlert(
-          'Duplicate item',
-          'This expense type is already selected for the selected date.',
+          "Duplicate item",
+          "This expense type is already selected for the selected date.",
         );
         return prev;
       }
@@ -191,23 +189,23 @@ export function CreateExpenseClaimScreen() {
 
   const removeItem = (index: number) => {
     if (items.length <= 1) {
-      appAlert('Required', 'At least one expense item is required.');
+      appAlert("Required", "At least one expense item is required.");
       return;
     }
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
   const attachFile = async (index: number) => {
-    appAlert('Attach bill', 'Choose a source', [
+    appAlert("Attach bill", "Choose a source", [
       {
-        text: 'Photo library',
+        text: "Photo library",
         onPress: () => void pickImage(index),
       },
       {
-        text: 'Files',
+        text: "Files",
         onPress: () => void pickDocument(index),
       },
-      { text: 'Cancel', style: 'cancel' },
+      { text: "Cancel", style: "cancel" },
     ]);
   };
 
@@ -215,7 +213,7 @@ export function CreateExpenseClaimScreen() {
     if (file.size != null && file.size > MAX_FILE_BYTES) {
       const mb = (file.size / (1024 * 1024)).toFixed(2);
       appAlert(
-        'File too large',
+        "File too large",
         `File size must be less than 1MB. Your file is ${mb} MB.`,
       );
       return;
@@ -226,7 +224,7 @@ export function CreateExpenseClaimScreen() {
   const pickImage = async (index: number) => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      appAlert('Permission needed', 'Photo library access is required.');
+      appAlert("Permission needed", "Photo library access is required.");
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -237,15 +235,15 @@ export function CreateExpenseClaimScreen() {
     const asset = result.assets[0];
     applyLocalFile(index, {
       uri: asset.uri,
-      name: asset.fileName || 'expense-bill.jpg',
-      mimeType: asset.mimeType || 'image/jpeg',
+      name: asset.fileName || "expense-bill.jpg",
+      mimeType: asset.mimeType || "image/jpeg",
       size: asset.fileSize ?? null,
     });
   };
 
   const pickDocument = async (index: number) => {
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['image/*', 'application/pdf'],
+      type: ["image/*", "application/pdf"],
       copyToCacheDirectory: true,
       multiple: false,
     });
@@ -253,7 +251,7 @@ export function CreateExpenseClaimScreen() {
     const asset = result.assets[0];
     applyLocalFile(index, {
       uri: asset.uri,
-      name: asset.name || 'expense-bill',
+      name: asset.name || "expense-bill",
       mimeType: asset.mimeType,
       size: asset.size ?? null,
     });
@@ -261,8 +259,8 @@ export function CreateExpenseClaimScreen() {
 
   const validate = () => {
     const errors: string[] = [];
-    if (!user?.employee_id) errors.push('Employee ID');
-    if (!departmentOfVisit) errors.push('Department of visit');
+    if (!user?.employee_id) errors.push("Employee ID");
+    if (!departmentOfVisit) errors.push("Department of visit");
     items.forEach((item, index) => {
       if (!item.expense_date) errors.push(`Item ${index + 1}: Date`);
       if (!item.expense_type) errors.push(`Item ${index + 1}: Type`);
@@ -281,7 +279,7 @@ export function CreateExpenseClaimScreen() {
   const handleSubmit = async () => {
     const errors = validate();
     if (errors.length) {
-      appAlert('Missing fields', errors.join('\n'));
+      appAlert("Missing fields", errors.join("\n"));
       return;
     }
 
@@ -291,7 +289,7 @@ export function CreateExpenseClaimScreen() {
       const uploadedItems = [];
 
       for (const [idx, item] of items.entries()) {
-        let fileUrl = '';
+        let fileUrl = "";
         if (item.localFile?.uri) {
           fileUrl = await uploadExpenseClaimFile(
             item.localFile.uri,
@@ -307,61 +305,61 @@ export function CreateExpenseClaimScreen() {
           description: item.description.trim(),
           amount,
           sanctioned_amount: amount,
-          default_account: '',
+          default_account: "",
           file: fileUrl,
           attachment: fileUrl,
           docstatus: 0,
-          doctype: 'Expense Claim Detail',
+          doctype: "Expense Claim Detail",
           __islocal: 1,
           __unsaved: 1,
           owner: user!.email,
           name: `new-expense-claim-detail-${randomSuffix()}`,
           parent: claimName,
-          parentfield: 'expenses',
-          parenttype: 'Expense Claim',
+          parentfield: "expenses",
+          parenttype: "Expense Claim",
           idx: idx + 1,
         });
       }
 
       await createExpenseClaim({
-        company: 'Taypro Private Limited',
-        naming_series: 'HR-EXP-.YYYY.-',
+        company: "Taypro Private Limited",
+        naming_series: "HR-EXP-.YYYY.-",
         name: claimName,
         posting_date: postingDate,
         cost_center: costCenter,
-        payable_account: 'Employee Expenses Payable - TPL',
-        department: user?.department || 'Project - TPL',
-        expense_approver: 'tejas.memane@taypro.in',
-        company_gstin: '27AAHCT4250H1ZA',
+        payable_account: "Expense Claim Payable - TAYPRO",
+        department: departmentOfVisit,
+        expense_approver: "tejas.memane@taypro.in",
+        company_gstin: "27AAHCT4250H1ZA",
         department_of_visit: departmentOfVisit,
         employee: user!.employee_id!,
         employee_name: user!.username,
         owner: user!.email,
         docstatus: 0,
-        doctype: 'Expense Claim',
+        doctype: "Expense Claim",
         __islocal: 1,
         __unsaved: 1,
-        approval_status: 'Draft',
-        status: 'Draft',
-        workflow_state: 'Draft',
-        console_status: 'Waiting For Approval',
+        approval_status: "Draft",
+        status: "Draft",
+        workflow_state: "Draft",
+        console_status: "Waiting For Approval",
         is_paid: true,
         taxes: [],
         advances: [],
-        remark: 'Site visit',
+        remark: "Site visit",
         total_claimed_amount: totals.total_claimed_amount,
         total_sanctioned_amount: totals.total_sanctioned_amount,
         grand_total: totals.grand_total,
         expenses: uploadedItems,
       });
 
-      appAlert('Expense created', 'Expense claim created successfully.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+      appAlert("Expense created", "Expense claim created successfully.", [
+        { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
       appAlert(
-        'Create failed',
-        err instanceof Error ? err.message : 'Could not create expense claim',
+        "Create failed",
+        err instanceof Error ? err.message : "Could not create expense claim",
       );
     } finally {
       setSubmitting(false);
@@ -404,8 +402,14 @@ export function CreateExpenseClaimScreen() {
             },
           ]}
         >
-          <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
-          <Text style={[styles.limitsBannerText, { color: colors.textSecondary }]}>
+          <Ionicons
+            name="information-circle-outline"
+            size={18}
+            color={colors.primary}
+          />
+          <Text
+            style={[styles.limitsBannerText, { color: colors.textSecondary }]}
+          >
             View daily allowance limits
           </Text>
         </Pressable>
@@ -425,10 +429,10 @@ export function CreateExpenseClaimScreen() {
 
           <View style={styles.metaGrid}>
             {[
-              ['Employee', user?.username || '—'],
-              ['Employee ID', user?.employee_id || '—'],
-              ['Company', 'Taypro Private Limited'],
-              ['Approver', 'tejas.memane@taypro.in'],
+              ["Employee", user?.username || "—"],
+              ["Employee ID", user?.employee_id || "—"],
+              ["Company", "Taypro Private Limited"],
+              ["Approver", "tejas.memane@taypro.in"],
             ].map(([label, value]) => (
               <View
                 key={label}
@@ -520,7 +524,7 @@ export function CreateExpenseClaimScreen() {
               item.expense_type,
             );
             const typeOptions = [
-              { value: '', label: 'Select type' },
+              { value: "", label: "Select type" },
               ...EXPENSE_TYPES.map((type) => ({
                 value: type,
                 label: type,
@@ -573,7 +577,9 @@ export function CreateExpenseClaimScreen() {
                   <Text style={[styles.dateLabel, { color: colors.textMuted }]}>
                     Date
                   </Text>
-                  <Text style={[styles.dateValue, { color: colors.textPrimary }]}>
+                  <Text
+                    style={[styles.dateValue, { color: colors.textPrimary }]}
+                  >
                     {formatDisplayDate(item.expense_date)}
                   </Text>
                 </Pressable>
@@ -589,8 +595,8 @@ export function CreateExpenseClaimScreen() {
 
                 {duplicate ? (
                   <Text style={{ color: colors.danger, ...typography.caption }}>
-                    {item.expense_type} already selected for{' '}
-                    {item.expense_date}. Choose a different type.
+                    {item.expense_type} already selected for {item.expense_date}
+                    . Choose a different type.
                   </Text>
                 ) : null}
 
@@ -622,7 +628,7 @@ export function CreateExpenseClaimScreen() {
                   value={item.amount}
                   onChangeText={(value) =>
                     updateItem(index, {
-                      amount: value.replace(/[^0-9.]/g, ''),
+                      amount: value.replace(/[^0-9.]/g, ""),
                     })
                   }
                   keyboardType="decimal-pad"
@@ -701,20 +707,20 @@ export function CreateExpenseClaimScreen() {
           </Text>
           <View style={styles.summaryRow}>
             <Text style={{ color: colors.textMuted }}>Total claimed</Text>
-            <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
+            <Text style={{ color: colors.textPrimary, fontWeight: "700" }}>
               ₹{totals.total_claimed_amount.toFixed(2)}
             </Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={{ color: colors.textMuted }}>Grand total</Text>
-            <Text style={{ color: colors.primary, fontWeight: '700' }}>
+            <Text style={{ color: colors.primary, fontWeight: "700" }}>
               ₹{totals.grand_total.toFixed(2)}
             </Text>
           </View>
         </View>
 
         <Button
-          title={submitting ? 'Submitting...' : 'Submit'}
+          title={submitting ? "Submitting..." : "Submit"}
           onPress={() => void handleSubmit()}
           loading={submitting}
           disabled={submitting}
@@ -767,7 +773,8 @@ export function CreateExpenseClaimScreen() {
                     styles.limitLabel,
                     {
                       color: colors.textSecondary,
-                      fontWeight: index === ALLOWANCE_ROWS.length - 1 ? '700' : '500',
+                      fontWeight:
+                        index === ALLOWANCE_ROWS.length - 1 ? "700" : "500",
                     },
                   ]}
                 >
@@ -778,7 +785,8 @@ export function CreateExpenseClaimScreen() {
                     styles.limitValue,
                     {
                       color: colors.textPrimary,
-                      fontWeight: index === ALLOWANCE_ROWS.length - 1 ? '700' : '600',
+                      fontWeight:
+                        index === ALLOWANCE_ROWS.length - 1 ? "700" : "600",
                     },
                   ]}
                 >
@@ -795,7 +803,7 @@ export function CreateExpenseClaimScreen() {
         </View>
       </Modal>
 
-      {datePicker && Platform.OS === 'android' ? (
+      {datePicker && Platform.OS === "android" ? (
         <DateTimePicker
           value={pickerDate}
           mode="date"
@@ -808,7 +816,7 @@ export function CreateExpenseClaimScreen() {
         />
       ) : null}
 
-      {datePicker && Platform.OS === 'ios' ? (
+      {datePicker && Platform.OS === "ios" ? (
         <Modal transparent animationType="slide">
           <View style={styles.iosPickerBackdrop}>
             <View
@@ -827,7 +835,7 @@ export function CreateExpenseClaimScreen() {
                     setDatePicker(null);
                   }}
                 >
-                  <Text style={{ color: colors.primary, fontWeight: '700' }}>
+                  <Text style={{ color: colors.primary, fontWeight: "700" }}>
                     Done
                   </Text>
                 </Pressable>
@@ -839,7 +847,7 @@ export function CreateExpenseClaimScreen() {
                 onValueChange={(_event, date) => {
                   if (date) setPickerDate(date);
                 }}
-                themeVariant={isDark ? 'dark' : 'light'}
+                themeVariant={isDark ? "dark" : "light"}
               />
             </View>
           </View>
@@ -859,12 +867,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   limitsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     borderWidth: 1,
     borderRadius: radius.md,
@@ -880,17 +888,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.label,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
   metaGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
   metaChip: {
@@ -898,11 +906,11 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    minWidth: '47%',
+    minWidth: "47%",
     flexGrow: 1,
   },
   metaLabel: { ...typography.caption, fontSize: 10 },
-  metaValue: { ...typography.bodySmall, fontWeight: '600' },
+  metaValue: { ...typography.bodySmall, fontWeight: "600" },
   datePill: {
     borderWidth: 1,
     borderRadius: radius.md,
@@ -911,7 +919,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   dateLabel: { ...typography.caption, fontSize: 10 },
-  dateValue: { ...typography.bodySmall, fontWeight: '600' },
+  dateValue: { ...typography.bodySmall, fontWeight: "600" },
   itemCard: {
     borderWidth: 1,
     borderRadius: radius.lg,
@@ -919,11 +927,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   itemHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  itemTitle: { ...typography.label, fontSize: 13, fontWeight: '700' },
+  itemTitle: { ...typography.label, fontSize: 13, fontWeight: "700" },
   inputLabel: { ...typography.caption, fontSize: 11 },
   input: {
     borderWidth: 1,
@@ -938,12 +946,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     minHeight: 84,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
     ...typography.bodySmall,
   },
   fileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     borderWidth: 1,
     borderRadius: radius.md,
@@ -952,14 +960,14 @@ const styles = StyleSheet.create({
   },
   fileName: { ...typography.caption, flex: 1 },
   summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, justifyContent: "flex-end" },
   modalBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
   limitsSheet: {
     borderTopLeftRadius: radius.xl,
@@ -969,23 +977,23 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
   },
-  modalTitle: { ...typography.label, fontSize: 16, fontWeight: '700', flex: 1 },
+  modalTitle: { ...typography.label, fontSize: 16, fontWeight: "700", flex: 1 },
   limitRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: spacing.sm,
   },
   limitLabel: { ...typography.bodySmall },
   limitValue: { ...typography.bodySmall },
   iosPickerBackdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   iosPickerSheet: {
     borderTopLeftRadius: radius.lg,
@@ -993,8 +1001,8 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   iosPickerActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },

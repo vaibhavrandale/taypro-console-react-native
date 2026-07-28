@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import {
   type RouteProp,
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Navbar } from '../components/layout';
 import { Badge, Button } from '../components/ui';
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
@@ -29,9 +31,9 @@ import {
 } from '../components/serviceTickets/TicketSearchSheet';
 import {
   fetchFaultAnalysisChecklist,
-  fetchServiceInventory,
   fetchServiceTicketById,
   fetchServiceTicketFaults,
+  fetchSitewiseServiceInventory,
   resolveServiceTicket,
 } from '../api/serviceTickets';
 import { useTheme } from '../theme';
@@ -45,6 +47,7 @@ import type {
 } from '../types/serviceTickets';
 import { isChecklistComplete } from '../types/serviceTickets';
 import type { ServiceTicketsStackParamList } from '../navigation/ServiceTicketsStack';
+import { resolveProfileImageUri } from '../utils/cleaningLogs';
 
 type Navigation = NativeStackNavigationProp<
   ServiceTicketsStackParamList,
@@ -52,19 +55,81 @@ type Navigation = NativeStackNavigationProp<
 >;
 type Route = RouteProp<ServiceTicketsStackParamList, 'ResolveTicket'>;
 
+type PartRow = {
+  key: string;
+  part_replaced_id: string;
+  part_replaced: string;
+  replaced_part_quantity: string;
+  item_image?: string | null;
+  checklist: Record<string, string> | null;
+};
+
+function emptyPartRow(): PartRow {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    part_replaced_id: '',
+    part_replaced: '',
+    replaced_part_quantity: '',
+    item_image: null,
+    checklist: null,
+  };
+}
+
+function hydrateParts(ticket: ServiceTicket): PartRow[] {
+  if (Array.isArray(ticket.parts_replaced) && ticket.parts_replaced.length > 0) {
+    return ticket.parts_replaced.map((part) => {
+      const checklistEntry = (ticket.part_checklist || []).find(
+        (c) => c.part_id === part.part_replaced_id,
+      );
+      return {
+        ...emptyPartRow(),
+        part_replaced_id: part.part_replaced_id || '',
+        part_replaced: part.part_replaced || '',
+        replaced_part_quantity: String(part.replaced_part_quantity ?? ''),
+        item_image: part.item_image ?? null,
+        checklist:
+          part.checklist && typeof part.checklist === 'object'
+            ? part.checklist
+            : checklistEntry?.checklist || null,
+      };
+    });
+  }
+
+  if (ticket.part_replaced_id) {
+    const checklistEntry = (ticket.part_checklist || []).find(
+      (c) => c.part_id === ticket.part_replaced_id,
+    );
+    return [
+      {
+        ...emptyPartRow(),
+        part_replaced_id: ticket.part_replaced_id,
+        part_replaced: ticket.part_replaced || '',
+        replaced_part_quantity: String(ticket.replaced_part_quantity ?? ''),
+        item_image: ticket.part_replaced_image ?? null,
+        checklist: checklistEntry?.checklist || null,
+      },
+    ];
+  }
+
+  return [emptyPartRow()];
+}
+
 export function ResolveServiceTicketScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<Navigation>();
   const route = useRoute<Route>();
   const { ticketId } = route.params;
 
   const [form, setForm] = useState<ServiceTicket | null>(null);
+  const [parts, setParts] = useState<PartRow[]>([emptyPartRow()]);
   const [faults, setFaults] = useState<ServiceTicketFault[]>([]);
   const [inventory, setInventory] = useState<ServiceInventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const [activePartKey, setActivePartKey] = useState<string | null>(null);
   const [inventorySheet, setInventorySheet] = useState(false);
   const [checklistVisible, setChecklistVisible] = useState(false);
   const [checklistLoading, setChecklistLoading] = useState(false);
@@ -72,11 +137,6 @@ export function ResolveServiceTicketScreen() {
   const [checklistResponses, setChecklistResponses] = useState<
     Record<string, string>
   >({});
-  const [savedChecklist, setSavedChecklist] = useState<Record<
-    string,
-    string
-  > | null>(null);
-  const [checklistSaved, setChecklistSaved] = useState(false);
   const [photoTarget, setPhotoTarget] = useState<{
     kind: 'generated' | 'resolved';
     index: number;
@@ -89,16 +149,12 @@ export function ResolveServiceTicketScreen() {
       const [ticket, faultData, inventoryData] = await Promise.all([
         fetchServiceTicketById(ticketId),
         fetchServiceTicketFaults(),
-        fetchServiceInventory(),
+        fetchSitewiseServiceInventory(),
       ]);
       setForm(ticket);
+      setParts(hydrateParts(ticket));
       setFaults(faultData);
       setInventory(inventoryData);
-      if (ticket.part_checklist?.[0]?.checklist) {
-        setSavedChecklist(ticket.part_checklist[0].checklist);
-        setChecklistResponses(ticket.part_checklist[0].checklist);
-        setChecklistSaved(true);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load ticket');
     } finally {
@@ -121,6 +177,7 @@ export function ResolveServiceTicketScreen() {
         ]
           .filter(Boolean)
           .join(' · '),
+        imageUri: resolveProfileImageUri(item.item_image ?? undefined),
       })),
     [inventory],
   );
@@ -137,34 +194,56 @@ export function ResolveServiceTicketScreen() {
   );
 
   const partReplaced = Boolean(form?.service_part_replaced);
-  const quantityValid =
-    form?.replaced_part_quantity != null &&
-    Number(form.replaced_part_quantity) > 0;
-  const partSelected = Boolean(form?.part_replaced_id);
 
-  const canSubmit = useMemo(() => {
-    if (!form?.ticket_resolved) return false;
+  const partsValid = useMemo(() => {
     if (!partReplaced) return true;
-    return partSelected && quantityValid && checklistSaved;
-  }, [form?.ticket_resolved, partReplaced, partSelected, quantityValid, checklistSaved]);
+    return (
+      parts.length > 0 &&
+      parts.every(
+        (p) =>
+          Boolean(p.part_replaced_id) &&
+          Number(p.replaced_part_quantity) > 0 &&
+          p.checklist !== null &&
+          typeof p.checklist === 'object',
+      )
+    );
+  }, [partReplaced, parts]);
 
-  const openChecklist = async (itemId: string, reopen = false) => {
+  const canSubmit = Boolean(form?.ticket_resolved) && partsValid;
+
+  const updatePart = (key: string, patch: Partial<PartRow>) => {
+    setParts((prev) =>
+      prev.map((p) => (p.key === key ? { ...p, ...patch } : p)),
+    );
+  };
+
+  const openChecklist = async (part: PartRow, reopen = false) => {
+    if (!part.part_replaced_id) {
+      appAlert('Select a part', 'Pick an inventory item first.');
+      return;
+    }
+    setActivePartKey(part.key);
     setChecklistLoading(true);
     setChecklistVisible(true);
     try {
-      const result = await fetchFaultAnalysisChecklist(itemId);
+      const result = await fetchFaultAnalysisChecklist(part.part_replaced_id);
       setChecklistFields(result.fields);
-      if (reopen && savedChecklist) {
-        setChecklistResponses(savedChecklist);
-      } else if (!reopen) {
-        setChecklistResponses({});
+      if (!result.fields.length && !reopen) {
+        updatePart(part.key, { checklist: {} });
+        setChecklistVisible(false);
+        appAlert('Checklist', 'No checklist configured for this part.');
+        return;
       }
+      setChecklistResponses(
+        reopen && part.checklist ? part.checklist : {},
+      );
     } catch (err) {
       appAlert(
         'Checklist unavailable',
         err instanceof Error ? err.message : 'Could not load checklist',
       );
       setChecklistFields([]);
+      setChecklistVisible(false);
     } finally {
       setChecklistLoading(false);
     }
@@ -172,21 +251,25 @@ export function ResolveServiceTicketScreen() {
 
   const selectPart = async (item: SearchSheetItem) => {
     const inv = inventory.find((row) => row.item_id === item.id);
-    if (!inv || !form) return;
+    if (!inv || !activePartKey) return;
 
-    setForm({
-      ...form,
+    const next: PartRow = {
+      key: activePartKey,
       part_replaced_id: inv.item_id,
       part_replaced: `${inv.item_name} - ${inv.item_code}`,
-    });
-    setChecklistSaved(false);
-    setSavedChecklist(null);
-    setChecklistResponses({});
-    await openChecklist(inv.item_id, false);
+      replaced_part_quantity:
+        parts.find((p) => p.key === activePartKey)?.replaced_part_quantity ||
+        '',
+      item_image: inv.item_image ?? null,
+      checklist: null,
+    };
+    updatePart(activePartKey, next);
+    setInventorySheet(false);
+    await openChecklist(next, false);
   };
 
   const saveChecklist = () => {
-    if (!form?.part_replaced_id) return;
+    if (!activePartKey) return;
     if (
       checklistFields.length > 0 &&
       !isChecklistComplete(checklistFields, checklistResponses)
@@ -197,9 +280,7 @@ export function ResolveServiceTicketScreen() {
       );
       return;
     }
-
-    setSavedChecklist({ ...checklistResponses });
-    setChecklistSaved(true);
+    updatePart(activePartKey, { checklist: { ...checklistResponses } });
     setChecklistVisible(false);
     appAlert('Saved', 'Checklist saved successfully.');
   };
@@ -233,16 +314,33 @@ export function ResolveServiceTicketScreen() {
         ...rest
       } = form;
 
+      const servicePartReplaced = Boolean(rest.service_part_replaced);
+      const parts_replaced = servicePartReplaced
+        ? parts
+            .filter((p) => p.part_replaced_id)
+            .map((p) => ({
+              part_replaced_id: p.part_replaced_id,
+              part_replaced: p.part_replaced,
+              replaced_part_quantity: Number(p.replaced_part_quantity) || 0,
+              item_image: p.item_image || null,
+              checklist: p.checklist || {},
+            }))
+        : [];
+
+      const first = parts_replaced[0];
+
       await resolveServiceTicket(_id, {
         ...rest,
-        part_checklist: partReplaced
-          ? [
-              {
-                part_id: form.part_replaced_id,
-                checklist: savedChecklist ?? checklistResponses,
-              },
-            ]
-          : [],
+        service_part_replaced: servicePartReplaced,
+        parts_replaced,
+        part_replaced: first?.part_replaced || null,
+        part_replaced_id: first?.part_replaced_id || null,
+        replaced_part_quantity: first?.replaced_part_quantity || null,
+        part_replaced_image: first?.item_image || null,
+        part_checklist: parts_replaced.map((p) => ({
+          part_id: p.part_replaced_id,
+          checklist: p.checklist || {},
+        })),
       });
 
       appAlert(
@@ -280,6 +378,8 @@ export function ResolveServiceTicketScreen() {
       ]
     : EMPTY_IMAGES;
 
+  const activePart = parts.find((p) => p.key === activePartKey);
+
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Navbar
@@ -311,10 +411,52 @@ export function ResolveServiceTicketScreen() {
           )}
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-        >
+        <>
+          <View
+            style={[
+              styles.topActionBar,
+              {
+                backgroundColor: colors.backgroundSecondary,
+                borderBottomColor: colors.border,
+              },
+            ]}
+          >
+            {!canSubmit ? (
+              <Text
+                style={[styles.hint, { color: colors.badge.warning.text }]}
+                numberOfLines={2}
+              >
+                Mark resolved
+                {partReplaced
+                  ? ', add part(s) with quantity and checklist'
+                  : ''}{' '}
+                to enable update.
+              </Text>
+            ) : (
+              <Text
+                style={[styles.topActionReady, { color: colors.textMuted }]}
+                numberOfLines={1}
+              >
+                Ready to update
+              </Text>
+            )}
+            <Button
+              title={saving ? 'Updating...' : 'Update ticket'}
+              onPress={() => void handleSubmit()}
+              loading={saving}
+              disabled={!canSubmit || saving}
+              size="sm"
+              icon="checkmark-done-outline"
+            />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={[
+              styles.content,
+              { paddingBottom: insets.bottom + spacing.xxl + spacing.md },
+            ]}
+            keyboardShouldPersistTaps="handled"
+          >
           <View
             style={[
               styles.section,
@@ -434,10 +576,10 @@ export function ResolveServiceTicketScreen() {
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sectionTitle, { color: colors.primary }]}>
-                  Part replaced?
+                  Part(s) replaced?
                 </Text>
                 <Text style={[styles.hint, { color: colors.textMuted }]}>
-                  Enabling this requires a full checklist and quantity.
+                  Add one or more parts. Each needs quantity and checklist.
                 </Text>
               </View>
               <Switch
@@ -454,97 +596,188 @@ export function ResolveServiceTicketScreen() {
                           replaced_part_quantity: '',
                         }),
                   });
-                  if (!next) {
-                    setChecklistSaved(false);
-                    setSavedChecklist(null);
-                    setChecklistResponses({});
-                    setChecklistFields([]);
-                  }
+                  setParts([emptyPartRow()]);
+                  setActivePartKey(null);
                 }}
                 trackColor={{ false: colors.border, true: colors.primary }}
                 thumbColor="#FFFFFF"
               />
             </View>
 
+            {partReplaced
+              ? parts.map((part, idx) => (
+                  <View
+                    key={part.key}
+                    style={[
+                      styles.partCard,
+                      {
+                        backgroundColor: colors.background,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.headerRow}>
+                      <Text
+                        style={[
+                          styles.sectionTitle,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        Part {idx + 1}
+                      </Text>
+                      <View style={styles.partActions}>
+                        {part.checklist ? (
+                          <Button
+                            title="Checklist"
+                            size="sm"
+                            variant="outline"
+                            onPress={() => void openChecklist(part, true)}
+                          />
+                        ) : null}
+                        <Pressable
+                          onPress={() =>
+                            setParts((prev) =>
+                              prev.length <= 1
+                                ? [emptyPartRow()]
+                                : prev.filter((p) => p.key !== part.key),
+                            )
+                          }
+                          hitSlop={8}
+                          style={[
+                            styles.iconBtn,
+                            { backgroundColor: colors.backgroundTertiary },
+                          ]}
+                        >
+                          <Ionicons
+                            name="trash-outline"
+                            size={16}
+                            color={colors.danger}
+                          />
+                        </Pressable>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      onPress={() => {
+                        setActivePartKey(part.key);
+                        setInventorySheet(true);
+                      }}
+                      style={[
+                        styles.picker,
+                        {
+                          backgroundColor: colors.backgroundTertiary,
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      {part.item_image ? (
+                        <Image
+                          source={{
+                            uri:
+                              resolveProfileImageUri(part.item_image) ||
+                              part.item_image,
+                          }}
+                          style={styles.partThumb}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.partThumbFallback,
+                            { backgroundColor: colors.background },
+                          ]}
+                        >
+                          <Ionicons
+                            name="cube-outline"
+                            size={16}
+                            color={colors.textMuted}
+                          />
+                        </View>
+                      )}
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text
+                          style={[
+                            styles.metaLabel,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          Select part
+                        </Text>
+                        <Text
+                          style={[
+                            styles.metaValue,
+                            { color: colors.textPrimary },
+                          ]}
+                        >
+                          {part.part_replaced || 'Search inventory item'}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="search-outline"
+                        size={16}
+                        color={colors.textMuted}
+                      />
+                    </Pressable>
+
+                    {part.part_replaced_id ? (
+                      <View style={styles.checklistStatus}>
+                        <Badge
+                          label={
+                            part.checklist
+                              ? 'Checklist saved'
+                              : 'Checklist required'
+                          }
+                          variant={part.checklist ? 'success' : 'error'}
+                          size="sm"
+                        />
+                        <Button
+                          title={
+                            part.checklist ? 'View checklist' : 'Fill checklist'
+                          }
+                          size="sm"
+                          variant="outline"
+                          onPress={() =>
+                            void openChecklist(part, Boolean(part.checklist))
+                          }
+                        />
+                      </View>
+                    ) : null}
+
+                    <Text
+                      style={[styles.fieldLabel, { color: colors.textMuted }]}
+                    >
+                      Replaced quantity
+                    </Text>
+                    <TextInput
+                      value={part.replaced_part_quantity}
+                      onChangeText={(text) =>
+                        updatePart(part.key, {
+                          replaced_part_quantity: text,
+                        })
+                      }
+                      keyboardType="numeric"
+                      placeholder="0"
+                      placeholderTextColor={colors.textMuted}
+                      style={[
+                        styles.input,
+                        {
+                          color: colors.textPrimary,
+                          backgroundColor: colors.inputBackground,
+                          borderColor: colors.inputBorder,
+                        },
+                      ]}
+                    />
+                  </View>
+                ))
+              : null}
+
             {partReplaced ? (
-              <>
-                <Pressable
-                  onPress={() => setInventorySheet(true)}
-                  style={[
-                    styles.picker,
-                    {
-                      backgroundColor: colors.backgroundTertiary,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text
-                      style={[styles.metaLabel, { color: colors.textMuted }]}
-                    >
-                      Select part
-                    </Text>
-                    <Text
-                      style={[styles.metaValue, { color: colors.textPrimary }]}
-                    >
-                      {form.part_replaced || 'Search inventory item'}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="cube-outline"
-                    size={16}
-                    color={colors.textMuted}
-                  />
-                </Pressable>
-
-                {form.part_replaced_id ? (
-                  <View style={styles.checklistStatus}>
-                    <Badge
-                      label={
-                        checklistSaved
-                          ? 'Checklist saved'
-                          : 'Checklist required'
-                      }
-                      variant={checklistSaved ? 'success' : 'error'}
-                      size="sm"
-                    />
-                    <Button
-                      title={checklistSaved ? 'View checklist' : 'Fill checklist'}
-                      size="sm"
-                      variant="outline"
-                      onPress={() =>
-                        void openChecklist(String(form.part_replaced_id), true)
-                      }
-                    />
-                  </View>
-                ) : null}
-
-                <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-                  Replaced quantity
-                </Text>
-                {!quantityValid ? (
-                  <Text style={[styles.hint, { color: colors.danger }]}>
-                    Enter a quantity greater than 0
-                  </Text>
-                ) : null}
-                <TextInput
-                  value={String(form.replaced_part_quantity ?? '')}
-                  onChangeText={(text) =>
-                    setForm({ ...form, replaced_part_quantity: text })
-                  }
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor={colors.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: colors.textPrimary,
-                      backgroundColor: colors.inputBackground,
-                      borderColor: colors.inputBorder,
-                    },
-                  ]}
-                />
-              </>
+              <Button
+                title="Add another part"
+                size="sm"
+                variant="outline"
+                icon="add-outline"
+                onPress={() => setParts((prev) => [...prev, emptyPartRow()])}
+              />
             ) : null}
           </View>
 
@@ -563,26 +796,8 @@ export function ResolveServiceTicketScreen() {
             onCapture={(index) => setPhotoTarget({ kind: 'resolved', index })}
             onRemove={(index) => setResolvedImage(index, '')}
           />
-
-          {!canSubmit ? (
-            <Text style={[styles.hint, { color: colors.badge.warning.text }]}>
-              Mark resolved
-              {partReplaced
-                ? ', select a part, complete the checklist, and enter quantity'
-                : ''}{' '}
-              to enable update.
-            </Text>
-          ) : null}
-
-          <Button
-            title={saving ? 'Updating...' : 'Update ticket'}
-            onPress={() => void handleSubmit()}
-            loading={saving}
-            disabled={!canSubmit || saving}
-            fullWidth
-            icon="checkmark-done-outline"
-          />
         </ScrollView>
+        </>
       )}
 
       <TicketSearchSheet
@@ -596,7 +811,7 @@ export function ResolveServiceTicketScreen() {
 
       <PartChecklistModal
         visible={checklistVisible}
-        partLabel={form?.part_replaced ?? ''}
+        partLabel={activePart?.part_replaced ?? ''}
         fields={checklistFields}
         responses={checklistResponses}
         loading={checklistLoading}
@@ -642,7 +857,18 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.md,
     gap: spacing.md,
-    paddingBottom: spacing.xl,
+  },
+  topActionBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  topActionReady: {
+    ...typography.caption,
+    flex: 1,
   },
   centered: {
     flex: 1,
@@ -656,6 +882,24 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     gap: spacing.sm,
+  },
+  partCard: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  partActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerRow: {
     flexDirection: 'row',
@@ -716,6 +960,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 11,
     lineHeight: 15,
+    flex: 1,
   },
   picker: {
     flexDirection: 'row',
@@ -725,11 +970,22 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.sm,
   },
+  partThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+  },
+  partThumbFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   checklistStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    flexWrap: 'wrap',
   },
 });

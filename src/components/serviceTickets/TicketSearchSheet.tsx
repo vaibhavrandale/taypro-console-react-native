@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   FlatList,
+  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -17,6 +18,7 @@ export type SearchSheetItem = {
   id: string;
   title: string;
   subtitle?: string;
+  imageUri?: string;
 };
 
 type Props = {
@@ -97,7 +99,11 @@ export function TicketSearchSheet({
             />
             {query ? (
               <Pressable onPress={() => setQuery('')} hitSlop={8}>
-                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                <Ionicons
+                  name="close-circle"
+                  size={16}
+                  color={colors.textMuted}
+                />
               </Pressable>
             ) : null}
           </View>
@@ -112,7 +118,7 @@ export function TicketSearchSheet({
                 No matches found
               </Text>
             }
-            renderItem={({ item }) => (
+            renderItem={({ item, index }) => (
               <Pressable
                 onPress={() => {
                   onSelect(item);
@@ -129,16 +135,47 @@ export function TicketSearchSheet({
                   },
                 ]}
               >
-                <Text style={[styles.itemTitle, { color: colors.textPrimary }]}>
-                  {item.title}
+                <Text style={[styles.serial, { color: colors.textMuted }]}>
+                  #{index + 1}
                 </Text>
-                {item.subtitle ? (
-                  <Text
-                    style={[styles.itemSubtitle, { color: colors.textSecondary }]}
+                {item.imageUri ? (
+                  <Image
+                    source={{ uri: item.imageUri }}
+                    style={styles.itemImage}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.itemImageFallback,
+                      { backgroundColor: colors.backgroundTertiary },
+                    ]}
                   >
-                    {item.subtitle}
+                    <Ionicons
+                      name="cube-outline"
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </View>
+                )}
+                <View style={styles.itemText}>
+                  <Text
+                    style={[styles.itemTitle, { color: colors.textPrimary }]}
+                    numberOfLines={2}
+                  >
+                    {item.title}
                   </Text>
-                ) : null}
+                  {item.subtitle ? (
+                    <Text
+                      style={[
+                        styles.itemSubtitle,
+                        { color: colors.textSecondary },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  ) : null}
+                </View>
               </Pressable>
             )}
           />
@@ -154,7 +191,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {
@@ -202,9 +239,33 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
-    padding: spacing.md,
+    padding: spacing.sm,
+  },
+  serial: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    minWidth: 28,
+  },
+  itemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+  },
+  itemImageFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  itemText: {
+    flex: 1,
     gap: 2,
   },
   itemTitle: {

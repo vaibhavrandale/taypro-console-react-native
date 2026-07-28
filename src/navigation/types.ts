@@ -47,9 +47,11 @@ export type DrawerParamList = {
         siteName?: string;
       }
     | undefined;
+  RobotActivity: undefined;
   Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;
   ServiceTickets: NavigatorScreenParams<ServiceTicketsStackParamList> | undefined;
+  ServiceInventory: undefined;
   PreventiveMaintenance: NavigatorScreenParams<PreventiveMaintenanceStackParamList> | undefined;
   ExpenseClaims: NavigatorScreenParams<ExpenseClaimsStackParamList> | undefined;
   Settings: undefined;

@@ -99,6 +99,11 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         label: 'Service Tickets',
         icon: 'construct-outline',
       },
+      {
+        name: 'ServiceInventory',
+        label: 'Service Inventory',
+        icon: 'cube-outline',
+      },
       { name: 'Settings', label: 'Settings', icon: 'settings-outline' },
     ],
   },

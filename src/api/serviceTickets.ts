@@ -3,6 +3,7 @@ import type {
   ChecklistField,
   CreateServiceTicketPayload,
   FaultAnalysisChecklist,
+  ServiceInventoryActivity,
   ServiceInventoryItem,
   ServiceTicket,
   ServiceTicketFault,
@@ -230,13 +231,123 @@ export async function resolveServiceTicket(
   }
 }
 
+function coerceId(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object' && value !== null && '$oid' in value) {
+    const oid = (value as { $oid: unknown }).$oid;
+    return typeof oid === 'string' ? oid : undefined;
+  }
+  return undefined;
+}
+
+function coerceDate(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return new Date(value).toISOString();
+  if (typeof value === 'object' && value !== null && '$date' in value) {
+    const raw = (value as { $date: unknown }).$date;
+    if (typeof raw === 'string' || typeof raw === 'number') {
+      return new Date(raw).toISOString();
+    }
+  }
+  return undefined;
+}
+
+function asInventoryActivity(value: unknown): ServiceInventoryActivity | null {
+  if (!isRecord(value)) return null;
+  return {
+    name: typeof value.name === 'string' ? value.name : undefined,
+    email: typeof value.email === 'string' ? value.email : undefined,
+    profile_image:
+      typeof value.profile_image === 'string'
+        ? value.profile_image
+        : undefined,
+    timestamp: coerceDate(value.timestamp),
+    userId:
+      coerceId(value.userId) ??
+      (typeof value.userId === 'string' ? value.userId : undefined),
+    details: typeof value.details === 'string' ? value.details : undefined,
+    role: typeof value.role === 'string' ? value.role : undefined,
+  };
+}
+
+function asInventoryItem(value: unknown): ServiceInventoryItem | null {
+  if (!isRecord(value)) return null;
+  const itemId =
+    coerceId(value.item_id) ??
+    (typeof value.item_id === 'string' ? value.item_id : undefined);
+  const itemName =
+    typeof value.item_name === 'string' ? value.item_name : undefined;
+  const itemCode =
+    typeof value.item_code === 'string' ? value.item_code : undefined;
+  if (!itemId && !itemName && !itemCode) return null;
+
+  const last_activity = Array.isArray(value.last_activity)
+    ? value.last_activity
+        .map(asInventoryActivity)
+        .filter((row): row is ServiceInventoryActivity => row != null)
+    : undefined;
+
+  return {
+    _id: coerceId(value._id),
+    item_id: itemId ?? itemCode ?? itemName ?? '',
+    item_name: itemName ?? '—',
+    item_code: itemCode ?? '—',
+    site_id: typeof value.site_id === 'string' ? value.site_id : undefined,
+    company: typeof value.company === 'string' ? value.company : undefined,
+    quantity:
+      typeof value.quantity === 'number'
+        ? value.quantity
+        : Number(value.quantity) || undefined,
+    threshold:
+      typeof value.threshold === 'number'
+        ? value.threshold
+        : value.threshold != null
+          ? Number(value.threshold) || undefined
+          : undefined,
+    item_image:
+      typeof value.item_image === 'string' ? value.item_image : null,
+    item_description:
+      typeof value.item_description === 'string'
+        ? value.item_description
+        : undefined,
+    is_delete: Boolean(value.is_delete),
+    last_activity,
+    createdAt: coerceDate(value.createdAt),
+    updatedAt: coerceDate(value.updatedAt),
+  };
+}
+
+function asInventoryList(payload: unknown): ServiceInventoryItem[] {
+  const raw = asArray<unknown>(payload);
+  return raw
+    .map(asInventoryItem)
+    .filter((item): item is ServiceInventoryItem => item != null);
+}
+
 export async function fetchServiceInventory(): Promise<ServiceInventoryItem[]> {
   const response = await apiFetch('/service-inventory');
   const payload = await parseJson(response);
   if (!response.ok) {
     throwApiError(payload, 'Failed to load inventory');
   }
-  return asArray<ServiceInventoryItem>(payload);
+  return asInventoryList(payload);
+}
+
+/** Inventory for the signed-in user's assigned sites. */
+export async function fetchSitewiseServiceInventory(): Promise<
+  ServiceInventoryItem[]
+> {
+  const response = await apiFetch('/service-inventory/get-sitewise-inventory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throwApiError(payload, 'Failed to load site inventory');
+  }
+  return asInventoryList(payload);
 }
 
 export async function fetchFaultAnalysisChecklist(

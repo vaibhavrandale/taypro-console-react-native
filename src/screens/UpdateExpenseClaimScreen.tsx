@@ -66,10 +66,10 @@ type ExpenseItemDraft = {
 const EXPENSE_TYPES = ['Food', 'Travel', 'Medical', 'Others'] as const;
 
 const DEPARTMENT_OPTIONS = [
-  { value: 'Project - TPL', label: 'Project' },
+  { value: 'Projects - TAYPRO', label: 'Project' },
 ];
 
-const COST_CENTER_OPTIONS = [{ value: 'Main - TPL', label: 'Main' }];
+const COST_CENTER_OPTIONS = [{ value: 'Main - TAYPRO', label: 'Main' }];
 
 const MAX_FILE_BYTES = 1 * 1024 * 1024;
 
@@ -84,17 +84,17 @@ function toDateInput(value?: string) {
 function getDefaultAccount(expenseType: string) {
   switch (expenseType) {
     case 'Food':
-      return 'Food Expenses - TPL';
+      return 'Material Cost For Accessories - TAYPRO';
     case 'Travel':
-      return 'Travel Expenses - TPL';
+      return 'RaaS Site Travel & Lodging - TAYPRO';
     case 'Stay':
-      return 'Hotel Expenses - TPL';
+      return 'RaaS Site Travel & Lodging - TAYPRO';
     case 'Communication':
-      return 'Communication Expenses - TPL';
+      return 'Miscellaneous Office Expenses - TAYPRO';
     case 'Office':
-      return 'Office Expenses - TPL';
+      return 'Miscellaneous Office Expenses - TAYPRO';
     default:
-      return 'Miscellaneous Expenses - TPL';
+      return 'Miscellaneous Office Expenses - TAYPRO';
   }
 }
 
@@ -121,7 +121,7 @@ function lineToDraft(item: ExpenseClaimLineItem): ExpenseItemDraft {
     cost_center:
       typeof item.cost_center === 'string' && item.cost_center
         ? item.cost_center
-        : 'Main - TPL',
+        : 'Main - TAYPRO',
     expense_type: item.expense_type ?? '',
     description: item.description ?? '',
     amount,
@@ -155,13 +155,13 @@ export function UpdateExpenseClaimScreen() {
   const [saving, setSaving] = useState(false);
   const [claim, setClaim] = useState<ExpenseClaim | null>(null);
   const [postingDate, setPostingDate] = useState(toDateInputValue(new Date()));
-  const [department, setDepartment] = useState('Project - TPL');
-  const [costCenter, setCostCenter] = useState('Main - TPL');
+  const [department, setDepartment] = useState('Projects - TAYPRO');
+  const [costCenter, setCostCenter] = useState('Main - TAYPRO');
   const [expenseApprover, setExpenseApprover] = useState('');
   const [companyGstin, setCompanyGstin] = useState('');
   const [canTechnicianEdit, setCanTechnicianEdit] = useState(false);
   const [items, setItems] = useState<ExpenseItemDraft[]>([
-    emptyItem('Main - TPL'),
+    emptyItem('Main - TAYPRO'),
   ]);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [datePicker, setDatePicker] = useState<
@@ -207,12 +207,12 @@ export function UpdateExpenseClaimScreen() {
       setDepartment(
         typeof data.department === 'string' && data.department
           ? data.department
-          : 'Project - TPL',
+          : 'Projects - TAYPRO',
       );
       setCostCenter(
         typeof data.cost_center === 'string' && data.cost_center
           ? data.cost_center
-          : 'Main - TPL',
+          : 'Main - TAYPRO',
       );
       setExpenseApprover(
         typeof data.expense_approver === 'string'
@@ -226,7 +226,7 @@ export function UpdateExpenseClaimScreen() {
       setItems(
         data.expenses && data.expenses.length > 0
           ? data.expenses.map(lineToDraft)
-          : [emptyItem('Main - TPL')],
+          : [emptyItem('Main - TAYPRO')],
       );
     } catch (err) {
       setError(

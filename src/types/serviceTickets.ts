@@ -13,12 +13,31 @@ export type ServiceTicketFault = {
   fault_name: string;
 };
 
+export type ServiceInventoryActivity = {
+  name?: string;
+  email?: string;
+  profile_image?: string;
+  timestamp?: string;
+  userId?: string;
+  details?: string;
+  role?: string;
+};
+
 export type ServiceInventoryItem = {
+  _id?: string;
   item_id: string;
   item_name: string;
   item_code: string;
   site_id?: string;
+  company?: string;
   quantity?: number;
+  threshold?: number;
+  item_image?: string | null;
+  item_description?: string;
+  is_delete?: boolean;
+  last_activity?: ServiceInventoryActivity[];
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ChecklistInputType = 'text' | 'select' | 'checkbox';
@@ -45,6 +64,16 @@ export type FaultAnalysisChecklist = {
 export type PartChecklistEntry = {
   part_id: string;
   checklist: Record<string, string>;
+};
+
+export type PartsReplacedEntry = {
+  part_replaced_id?: string | null;
+  part_replaced?: string | null;
+  replaced_part_quantity?: number | null;
+  item_image?: string | null;
+  item_code?: string | null;
+  checklist?: Record<string, string> | null;
+  _id?: string;
 };
 
 export type ServiceTicketLastActivity = {
@@ -84,7 +113,9 @@ export type ServiceTicket = {
   part_replaced?: string;
   part_replaced_id?: string;
   replaced_part_quantity?: number | string;
+  part_replaced_image?: string | null;
   part_checklist?: PartChecklistEntry[];
+  parts_replaced?: PartsReplacedEntry[];
   ticket_generated_images1?: string;
   ticket_generated_images2?: string;
   ticket_generated_images3?: string;
