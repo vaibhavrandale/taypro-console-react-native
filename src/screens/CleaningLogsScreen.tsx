@@ -22,6 +22,7 @@ import {
 import { Navbar } from '../components/layout';
 import { Input } from '../components/ui';
 import { fetchCleaningLogsForDay } from '../api/cleaningLogs';
+import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -35,6 +36,7 @@ import {
 } from '../types/cleaningLogs';
 import {
   formatTechnicianNames,
+  getDprTechnicianEmail,
   getDprTechnicianName,
   matchesCleaningSearch,
 } from '../utils/cleaningLogs';
@@ -135,6 +137,7 @@ export function CleaningLogsScreen() {
   const navigation = useNavigation();
   const route = useRoute<Route>();
   const { siteId, siteName } = route.params;
+  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const [date, setDate] = useState(toDateInputValue(new Date()));
   const [data, setData] = useState<CleaningLogsForDay | null>(null);
@@ -238,6 +241,7 @@ export function CleaningLogsScreen() {
           record.site_id,
           record.comments,
           getDprTechnicianName(record),
+          getDprTechnicianEmail(record),
           formatTechnicianNames(record.technician_present),
           record.report_date,
           record.new_report_date,
@@ -537,7 +541,10 @@ export function CleaningLogsScreen() {
             nestedScrollEnabled
             showsHorizontalScrollIndicator
             style={styles.tableScroll}
-            contentContainerStyle={styles.tableScrollContent}
+            contentContainerStyle={[
+              styles.tableScrollContent,
+              { paddingBottom: bottomPad },
+            ]}
           >
             <FlatList
               style={{ width: tableWidth }}
@@ -612,7 +619,6 @@ const styles = StyleSheet.create({
   },
   tableScrollContent: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxxl,
   },
   navButton: {
     width: 40,

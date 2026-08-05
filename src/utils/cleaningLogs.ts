@@ -69,11 +69,23 @@ export function formatTechnicianNames(
 }
 
 export function getDprTechnician(record: DprRecord) {
-  return record.last_activity?.[0] ?? record.technician_present?.[0];
+  const activity = record.last_activity;
+  if (Array.isArray(activity) && activity.length > 0) {
+    return activity[0];
+  }
+  if (activity && !Array.isArray(activity)) {
+    return activity;
+  }
+  return undefined;
 }
 
 export function getDprTechnicianName(record: DprRecord) {
-  return getDprTechnician(record)?.name ?? '—';
+  const technician = getDprTechnician(record);
+  return technician?.name ?? technician?.email ?? '—';
+}
+
+export function getDprTechnicianEmail(record: DprRecord) {
+  return getDprTechnician(record)?.email ?? '';
 }
 
 export function resolveProfileImageUri(path?: string) {

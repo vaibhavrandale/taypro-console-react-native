@@ -19,6 +19,11 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Navbar } from '../components/layout';
 import { ExpenseAttachmentModal } from '../components/expenseClaims/ExpenseAttachmentModal';
+import {
+  buildExpenseDashboardStats,
+  ExpenseClaimsDashboardStats,
+  type ExpenseDashboardStats,
+} from '../components/expenseClaims/ExpenseClaimsDashboardStats';
 import { Badge, Button } from '../components/ui';
 import {
   approveExpenseClaim,
@@ -52,6 +57,7 @@ type Navigation = NativeStackNavigationProp<
 >;
 
 const PAGE_LIMIT = 10;
+const STATS_LIMIT = 200;
 
 function decodeEntities(value: string) {
   return value
@@ -325,6 +331,7 @@ export function ExpenseClaimsScreen() {
     role === 'Site Technician' || role === 'Opex Site Technician';
 
   const [claims, setClaims] = useState<ExpenseClaim[]>([]);
+  const [stats, setStats] = useState<ExpenseDashboardStats | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -351,15 +358,26 @@ export function ExpenseClaimsScreen() {
       else setLoading(true);
       setError('');
       try {
-        const result = await fetchExpenseClaims({
-          page: targetPage,
-          limit: PAGE_LIMIT,
-        });
+        const [result, statsResult] = await Promise.all([
+          fetchExpenseClaims({
+            page: targetPage,
+            limit: PAGE_LIMIT,
+          }),
+          fetchExpenseClaims({
+            page: 1,
+            limit: STATS_LIMIT,
+          }).catch(() => null),
+        ]);
         setClaims(result.data);
         setPage(result.page);
         setTotalPages(result.totalPages);
         setHasNextPage(result.hasNextPage);
         setHasPrevPage(result.hasPrevPage);
+        if (statsResult) {
+          setStats(
+            buildExpenseDashboardStats(statsResult.data, statsResult.total),
+          );
+        }
       } catch (err) {
         setClaims([]);
         setError(
@@ -544,6 +562,9 @@ export function ExpenseClaimsScreen() {
               tintColor={colors.primary}
               colors={[colors.primary]}
             />
+          }
+          ListHeaderComponent={
+            stats ? <ExpenseClaimsDashboardStats stats={stats} /> : null
           }
           ListEmptyComponent={
             <View style={styles.centered}>

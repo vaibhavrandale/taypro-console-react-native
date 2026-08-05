@@ -1,118 +1,227 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Navbar } from '../components/layout';
-import { ServiceTicketDetailModal } from '../components/serviceTickets/ServiceTicketDetailModal';
-import { Badge, Button } from '../components/ui';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Navbar } from "../components/layout";
+import { ServiceTicketDetailModal } from "../components/serviceTickets/ServiceTicketDetailModal";
+import { ServiceTicketDashboardStatsCard } from "../components/serviceTickets/ServiceTicketDashboardStats";
+import { Button } from "../components/ui";
 import {
   fetchServiceTicketById,
+  fetchServiceTicketDashboardStats,
   fetchSitewiseServiceTickets,
-} from '../api/serviceTickets';
-import { useTheme } from '../theme';
-import { radius, spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import type { ServiceTicket } from '../types/serviceTickets';
-import type { ServiceTicketsStackParamList } from '../navigation/ServiceTicketsStack';
-import {
-  formatDateTimeIST,
-  formatRelativeTime,
-} from '../utils/datetime';
+} from "../api/serviceTickets";
+import { useContentBottomPadding } from "../hooks/useContentBottomPadding";
+import { useTheme } from "../theme";
+import type { ThemeColors } from "../theme/colors";
+import { radius, spacing } from "../theme/spacing";
+import { typography } from "../theme/typography";
+import type {
+  ServiceTicket,
+  ServiceTicketDashboardStats,
+} from "../types/serviceTickets";
+import type { ServiceTicketsStackParamList } from "../navigation/ServiceTicketsStack";
+import { formatDateTimeIST } from "../utils/datetime";
 
 type Navigation = NativeStackNavigationProp<
   ServiceTicketsStackParamList,
-  'TicketsList'
+  "TicketsList"
 >;
 
 const PAGE_LIMIT = 10;
 
-function TicketCard({
+const COL = {
+  no: 44,
+  ticket: 150,
+  status: 72,
+  site: 120,
+  robot: 120,
+  fault: 160,
+  created: 120,
+  actions: 130,
+} as const;
+
+const TABLE_WIDTH =
+  COL.no +
+  COL.ticket +
+  COL.status +
+  COL.site +
+  COL.robot +
+  COL.fault +
+  COL.created +
+  COL.actions;
+
+function Cell({
+  width,
+  children,
+  colors,
+  bold,
+  small,
+}: {
+  width: number;
+  children: React.ReactNode;
+  colors: ThemeColors;
+  bold?: boolean;
+  small?: boolean;
+}) {
+  return (
+    <Text
+      style={[
+        styles.cell,
+        { width, color: bold ? colors.textPrimary : colors.textSecondary },
+        bold && styles.cellBold,
+        small && styles.cellSmall,
+      ]}
+      numberOfLines={2}
+    >
+      {children}
+    </Text>
+  );
+}
+
+function HeaderCell({
+  width,
+  label,
+  colors,
+}: {
+  width: number;
+  label: string;
+  colors: ThemeColors;
+}) {
+  return (
+    <Text style={[styles.headerCell, { width, color: colors.textMuted }]}>
+      {label}
+    </Text>
+  );
+}
+
+function TicketTableHeader({ colors }: { colors: ThemeColors }) {
+  return (
+    <View
+      style={[
+        styles.tableHeader,
+        {
+          width: TABLE_WIDTH,
+          backgroundColor: colors.backgroundTertiary,
+          borderBottomColor: colors.border,
+        },
+      ]}
+    >
+      <HeaderCell width={COL.no} label="#" colors={colors} />
+      <HeaderCell width={COL.ticket} label="Ticket" colors={colors} />
+      <HeaderCell width={COL.status} label="Status" colors={colors} />
+      <HeaderCell width={COL.site} label="Site" colors={colors} />
+      <HeaderCell width={COL.robot} label="Robot" colors={colors} />
+      <HeaderCell width={COL.fault} label="Problem" colors={colors} />
+      <HeaderCell width={COL.created} label="Created" colors={colors} />
+      <HeaderCell width={COL.actions} label="Action" colors={colors} />
+    </View>
+  );
+}
+
+function TicketTableRow({
   ticket,
   index,
+  colors,
   onView,
   onResolve,
 }: {
   ticket: ServiceTicket;
   index: number;
+  colors: ThemeColors;
   onView: () => void;
   onResolve?: () => void;
 }) {
-  const { colors } = useTheme();
   const resolved = Boolean(ticket.ticket_resolved);
 
   return (
     <View
       style={[
-        styles.card,
+        styles.tableRow,
         {
+          width: TABLE_WIDTH,
+          borderBottomColor: colors.border,
           backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
         },
       ]}
     >
-      <View style={styles.cardTop}>
-        <Text style={[styles.serial, { color: colors.textMuted }]}>
-          #{index}
-        </Text>
-        <View style={styles.cardTitleBlock}>
-          <Text style={[styles.ticketId, { color: colors.textPrimary }]}>
-            {ticket.ticket_id || ticket._id}
+      <Cell width={COL.no} colors={colors}>
+        {index}
+      </Cell>
+      <Cell width={COL.ticket} colors={colors} bold small>
+        {ticket.ticket_id || ticket._id}
+      </Cell>
+      <View style={[styles.statusCell, { width: COL.status }]}>
+        <View
+          style={[
+            styles.statusPill,
+            {
+              backgroundColor: resolved
+                ? colors.badge.success.bg
+                : colors.badge.warning.bg,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: resolved
+                  ? colors.badge.success.text
+                  : colors.badge.warning.text,
+              },
+            ]}
+          >
+            {resolved ? "Closed" : "Open"}
           </Text>
-          <View style={styles.badgeRow}>
-            <Badge
-              label={resolved ? 'Resolved' : 'Open'}
-              variant={resolved ? 'success' : 'warning'}
-              size="sm"
-            />
-            {ticket.site_id ? (
-              <Badge label={ticket.site_id} variant="info" size="sm" />
-            ) : null}
-          </View>
         </View>
       </View>
-
-      <Text style={[styles.meta, { color: colors.textSecondary }]}>
-        {ticket.robot_no || '—'}
-        {ticket.block ? ` · ${ticket.block}` : ''}
-      </Text>
-      {ticket.fault_type ? (
-        <Text
-          style={[styles.fault, { color: colors.textMuted }]}
-          numberOfLines={2}
+      <Cell width={COL.site} colors={colors}>
+        {ticket.site_id || "—"}
+      </Cell>
+      <Cell width={COL.robot} colors={colors}>
+        {ticket.robot_no || "—"}
+      </Cell>
+      <Cell width={COL.fault} colors={colors}>
+        {ticket.fault_type?.replace(/-/g, " ").trim() || "—"}
+      </Cell>
+      <Cell width={COL.created} colors={colors}>
+        {ticket.createdAt ? formatDateTimeIST(ticket.createdAt) : "—"}
+      </Cell>
+      <View style={[styles.actionsCell, { width: COL.actions }]}>
+        <Pressable
+          onPress={onView}
+          style={[styles.actionBtn, { borderColor: colors.border }]}
         >
-          {ticket.fault_type.replace(/-/g, ' ')}
-        </Text>
-      ) : null}
-      {ticket.createdAt ? (
-        <Text
-          style={[styles.created, { color: colors.textMuted }]}
-          numberOfLines={1}
-        >
-          {formatRelativeTime(ticket.createdAt)}
-          {' · '}
-          {formatDateTimeIST(ticket.createdAt)}
-        </Text>
-      ) : null}
-
-      <View style={styles.actions}>
-        <Button title="View" size="sm" variant="outline" onPress={onView} />
+          <Text style={[styles.actionText, { color: colors.textPrimary }]}>
+            View
+          </Text>
+        </Pressable>
         {!resolved && onResolve ? (
-          <Button
-            title="Resolve"
-            size="sm"
-            icon="checkmark-circle-outline"
+          <Pressable
             onPress={onResolve}
-          />
+            style={[
+              styles.actionBtn,
+              {
+                borderColor: colors.primary,
+                backgroundColor: colors.badge.success.bg,
+              },
+            ]}
+          >
+            <Text style={[styles.actionText, { color: colors.primary }]}>
+              Resolve
+            </Text>
+          </Pressable>
         ) : null}
       </View>
     </View>
@@ -122,13 +231,15 @@ function TicketCard({
 export function ServiceTicketsScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation<Navigation>();
+  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
+  const [stats, setStats] = useState<ServiceTicketDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState<"all" | "open" | "resolved">("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -141,20 +252,24 @@ export function ServiceTicketsScreen() {
   const loadPage = useCallback(async (nextPage: number, isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
-    setError('');
+    setError("");
     try {
-      const result = await fetchSitewiseServiceTickets({
-        page: nextPage,
-        limit: PAGE_LIMIT,
-      });
+      const [result, dashboard] = await Promise.all([
+        fetchSitewiseServiceTickets({
+          page: nextPage,
+          limit: PAGE_LIMIT,
+        }),
+        fetchServiceTicketDashboardStats().catch(() => null),
+      ]);
       setTickets(result.data);
       setPage(result.page);
       setTotalPages(result.totalPages);
       setHasNextPage(result.hasNextPage);
       setHasPrevPage(result.hasPrevPage);
+      if (dashboard) setStats(dashboard);
     } catch (err) {
       setTickets([]);
-      setError(err instanceof Error ? err.message : 'Failed to load tickets');
+      setError(err instanceof Error ? err.message : "Failed to load tickets");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -170,19 +285,23 @@ export function ServiceTicketsScreen() {
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return tickets.filter((item) => {
-      if (filter === 'open' && item.ticket_resolved) return false;
-      if (filter === 'resolved' && !item.ticket_resolved) return false;
+      if (filter === "open" && item.ticket_resolved) return false;
+      if (filter === "resolved" && !item.ticket_resolved) return false;
       if (!term) return true;
       return (
-        (item.ticket_id ?? '').toLowerCase().includes(term) ||
-        (item.robot_no ?? '').toLowerCase().includes(term) ||
-        (item.deveui ?? '').toLowerCase().includes(term) ||
-        (item.site_id ?? '').toLowerCase().includes(term)
+        (item.ticket_id ?? "").toLowerCase().includes(term) ||
+        (item.robot_no ?? "").toLowerCase().includes(term) ||
+        (item.deveui ?? "").toLowerCase().includes(term) ||
+        (item.site_id ?? "").toLowerCase().includes(term) ||
+        (item.fault_type ?? "").toLowerCase().includes(term)
       );
     });
   }, [tickets, searchTerm, filter]);
 
-  const openCount = tickets.filter((t) => !t.ticket_resolved).length;
+  const openCount =
+    stats?.summary.pending ?? tickets.filter((t) => !t.ticket_resolved).length;
+  const raisedCount = stats?.summary.raised ?? tickets.length;
+  const resolvedCount = stats?.summary.resolved;
 
   const openViewModal = async (id: string) => {
     setViewVisible(true);
@@ -193,7 +312,7 @@ export function ServiceTicketsScreen() {
       setViewTicket(ticket);
     } catch (err) {
       setViewVisible(false);
-      setError(err instanceof Error ? err.message : 'Failed to load ticket');
+      setError(err instanceof Error ? err.message : "Failed to load ticket");
     } finally {
       setViewLoading(false);
     }
@@ -201,8 +320,80 @@ export function ServiceTicketsScreen() {
 
   const goResolve = (id: string) => {
     setViewVisible(false);
-    navigation.navigate('ResolveTicket', { ticketId: id });
+    navigation.navigate("ResolveTicket", { ticketId: id });
   };
+
+  const filterChips = (
+    <View style={styles.filters}>
+      {(["all", "open", "resolved"] as const).map((key) => {
+        const active = filter === key;
+        return (
+          <Pressable
+            key={key}
+            onPress={() => setFilter(key)}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: active
+                  ? colors.primary
+                  : colors.backgroundSecondary,
+                borderColor: active ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.chipText,
+                { color: active ? "#101936" : colors.textSecondary },
+              ]}
+            >
+              {key === "all"
+                ? `All (${raisedCount})`
+                : key === "open"
+                  ? `Open (${openCount})`
+                  : resolvedCount != null
+                    ? `Closed (${resolvedCount})`
+                    : "Closed"}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+
+  const pagination = (
+    <View style={styles.pagination}>
+      <Pressable
+        onPress={() => setPage((p) => Math.max(1, p - 1))}
+        disabled={!hasPrevPage || loading}
+        style={[
+          styles.pageButton,
+          {
+            backgroundColor: colors.backgroundTertiary,
+            opacity: hasPrevPage && !loading ? 1 : 0.4,
+          },
+        ]}
+      >
+        <Ionicons name="chevron-back" size={16} color={colors.textPrimary} />
+      </Pressable>
+      <Text style={[styles.pageText, { color: colors.textSecondary }]}>
+        Page {page} of {totalPages}
+      </Text>
+      <Pressable
+        onPress={() => setPage((p) => p + 1)}
+        disabled={!hasNextPage || loading}
+        style={[
+          styles.pageButton,
+          {
+            backgroundColor: colors.backgroundTertiary,
+            opacity: hasNextPage && !loading ? 1 : 0.4,
+          },
+        ]}
+      >
+        <Ionicons name="chevron-forward" size={16} color={colors.textPrimary} />
+      </Pressable>
+    </View>
+  );
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -222,7 +413,7 @@ export function ServiceTicketsScreen() {
           <TextInput
             value={searchTerm}
             onChangeText={setSearchTerm}
-            placeholder="Search ticket, robot, deveui, site"
+            placeholder="Search ticket, robot, site, problem"
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.textPrimary }]}
             autoCorrect={false}
@@ -234,53 +425,19 @@ export function ServiceTicketsScreen() {
           title="New"
           size="sm"
           icon="add-outline"
-          onPress={() => navigation.navigate('CreateTicket')}
+          onPress={() => navigation.navigate("CreateTicket")}
         />
       </View>
 
-      <View style={styles.filters}>
-        {(['all', 'open', 'resolved'] as const).map((key) => {
-          const active = filter === key;
-          return (
-            <Pressable
-              key={key}
-              onPress={() => setFilter(key)}
-              style={[
-                styles.chip,
-                {
-                  backgroundColor: active
-                    ? colors.primary
-                    : colors.backgroundSecondary,
-                  borderColor: active ? colors.primary : colors.border,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.chipText,
-                  { color: active ? '#101936' : colors.textSecondary },
-                ]}
-              >
-                {key === 'all'
-                  ? `All (${tickets.length})`
-                  : key === 'open'
-                    ? `Open (${openCount})`
-                    : 'Resolved'}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {loading && tickets.length === 0 ? (
+      {loading && tickets.length === 0 && !stats ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.list}
+        <ScrollView
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: bottomPad }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -289,8 +446,10 @@ export function ServiceTicketsScreen() {
               colors={[colors.primary]}
             />
           }
-          ListHeaderComponent={
-            error ? (
+        >
+          <View style={styles.dashboardPad}>
+            {stats ? <ServiceTicketDashboardStatsCard stats={stats} /> : null}
+            {error ? (
               <View
                 style={[
                   styles.errorBox,
@@ -308,81 +467,61 @@ export function ServiceTicketsScreen() {
                   onPress={() => void loadPage(page)}
                 />
               </View>
-            ) : null
-          }
-          ListEmptyComponent={
-            <View style={styles.centered}>
-              <Ionicons
-                name="construct-outline"
-                size={36}
-                color={colors.textMuted}
-              />
-              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                No tickets found
-              </Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                {searchTerm
-                  ? 'Try a different search on this page.'
-                  : 'Create a service ticket to get started.'}
-              </Text>
-            </View>
-          }
-          ListFooterComponent={
-            tickets.length > 0 ? (
-              <View style={styles.pagination}>
-                <Pressable
-                  onPress={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={!hasPrevPage || loading}
-                  style={[
-                    styles.pageButton,
-                    {
-                      backgroundColor: colors.backgroundTertiary,
-                      opacity: hasPrevPage && !loading ? 1 : 0.4,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={16}
-                    color={colors.textPrimary}
-                  />
-                </Pressable>
-                <Text style={[styles.pageText, { color: colors.textSecondary }]}>
-                  Page {page} of {totalPages}
-                </Text>
-                <Pressable
-                  onPress={() => setPage((p) => p + 1)}
-                  disabled={!hasNextPage || loading}
-                  style={[
-                    styles.pageButton,
-                    {
-                      backgroundColor: colors.backgroundTertiary,
-                      opacity: hasNextPage && !loading ? 1 : 0.4,
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    name="chevron-forward"
-                    size={16}
-                    color={colors.textPrimary}
-                  />
-                </Pressable>
+            ) : null}
+          </View>
+
+          <View style={styles.tableBlock}>
+            {filterChips}
+
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              showsHorizontalScrollIndicator
+              contentContainerStyle={styles.tableScrollContent}
+            >
+              <View
+                style={[
+                  styles.tableCard,
+                  {
+                    width: TABLE_WIDTH,
+                    borderColor: colors.border,
+                    backgroundColor: colors.backgroundSecondary,
+                  },
+                ]}
+              >
+                <TicketTableHeader colors={colors} />
+                {filtered.length === 0 ? (
+                  <View style={styles.emptyTable}>
+                    <Text
+                      style={[styles.emptyBody, { color: colors.textMuted }]}
+                    >
+                      {searchTerm || filter !== "all"
+                        ? "No tickets match this filter."
+                        : "No tickets on this page."}
+                    </Text>
+                  </View>
+                ) : (
+                  filtered.map((item, index) => (
+                    <TicketTableRow
+                      key={item._id}
+                      ticket={item}
+                      index={(page - 1) * PAGE_LIMIT + index + 1}
+                      colors={colors}
+                      onView={() => void openViewModal(item._id)}
+                      onResolve={
+                        item.ticket_resolved
+                          ? undefined
+                          : () => goResolve(item._id)
+                      }
+                    />
+                  ))
+                )}
               </View>
-            ) : null
-          }
-          renderItem={({ item, index }) => (
-            <TicketCard
-              ticket={item}
-              index={(page - 1) * PAGE_LIMIT + index + 1}
-              onView={() => void openViewModal(item._id)}
-              onResolve={
-                item.ticket_resolved
-                  ? undefined
-                  : () => goResolve(item._id)
-              }
-            />
-          )}
-        />
+            </ScrollView>
+
+            {tickets.length > 0 ? pagination : null}
+          </View>
+        </ScrollView>
       )}
 
       <ServiceTicketDetailModal
@@ -403,16 +542,17 @@ export function ServiceTicketsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   searchWrap: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
     borderWidth: 1,
     borderRadius: radius.md,
@@ -424,13 +564,18 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     paddingVertical: spacing.xs,
   },
+  dashboardPad: {
+    paddingHorizontal: spacing.md,
+  },
+  tableBlock: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
   filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
   },
   chip: {
     borderWidth: 1,
@@ -441,61 +586,112 @@ const styles = StyleSheet.create({
   chipText: {
     ...typography.caption,
     fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'capitalize',
+    fontWeight: "700",
+    textTransform: "capitalize",
   },
-  list: {
-    padding: spacing.md,
-    gap: spacing.sm,
-    paddingBottom: spacing.xl,
+  tableScrollContent: {
+    paddingHorizontal: spacing.md,
   },
-  card: {
+  tableCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    overflow: "hidden",
+  },
+  tableHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 48,
+  },
+  headerCell: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    paddingHorizontal: 4,
+  },
+  cell: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 14,
+    paddingHorizontal: 4,
+  },
+  cellBold: {
+    fontWeight: "700",
+  },
+  cellSmall: {
+    fontSize: 9,
+    lineHeight: 12,
+  },
+  statusCell: {
+    paddingHorizontal: 4,
+    justifyContent: "center",
+  },
+  statusPill: {
+    alignSelf: "flex-start",
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  statusText: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  actionsCell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 4,
+  },
+  actionBtn: {
     borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: spacing.xs,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
+  actionText: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "700",
   },
-  serial: { ...typography.caption, fontWeight: '700', marginTop: 2 },
-  cardTitleBlock: { flex: 1, gap: spacing.xs },
-  ticketId: { ...typography.label, fontSize: 15 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  meta: { ...typography.bodySmall },
-  fault: { ...typography.caption, fontSize: 11 },
-  created: { ...typography.caption, fontSize: 10, marginTop: 2 },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
+  emptyTable: {
+    padding: spacing.lg,
+    alignItems: "center",
   },
   pagination: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
   },
   pageButton: {
     width: 36,
     height: 36,
     borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  pageText: { ...typography.bodySmall, fontWeight: '600' },
+  pageText: { ...typography.bodySmall, fontWeight: "600" },
   centered: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  emptyTitle: { ...typography.label, fontSize: 16 },
-  emptyBody: { ...typography.bodySmall, textAlign: 'center' },
+  emptyBody: { ...typography.bodySmall, textAlign: "center" },
   errorBox: {
     borderWidth: 1,
     borderRadius: radius.md,

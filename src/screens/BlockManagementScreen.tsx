@@ -631,7 +631,10 @@ const styles = StyleSheet.create({
   },
   commandRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.xs,
+    marginHorizontal: spacing.md,
   },
   commandHint: {
     ...typography.caption,

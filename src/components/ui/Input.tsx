@@ -67,6 +67,7 @@ export function Input({
         <TextInput
           ref={inputRef}
           placeholderTextColor={colors.textMuted}
+          underlineColorAndroid="transparent"
           secureTextEntry={isPassword && !showPassword}
           onFocus={(e) => {
             setFocused(true);
@@ -76,7 +77,15 @@ export function Input({
             setFocused(false);
             onBlur?.(e);
           }}
-          style={[styles.input, { color: colors.textPrimary }, style]}
+          style={[
+            styles.input,
+            {
+              color: colors.textPrimary,
+              // Prevent Android autofill yellow showing through transparent input
+              backgroundColor: colors.inputBackground,
+            },
+            style,
+          ]}
           {...rest}
         />
         {isPassword ? (

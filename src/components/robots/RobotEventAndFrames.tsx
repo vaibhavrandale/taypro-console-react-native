@@ -684,6 +684,5 @@ const styles = StyleSheet.create({
   rawJson: {
     ...typography.caption,
     fontSize: 10,
-    fontFamily: "monospace",
   },
 });

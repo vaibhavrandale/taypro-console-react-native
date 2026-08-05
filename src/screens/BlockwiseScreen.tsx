@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Navbar, Screen } from "../components/layout";
 import { CompactCommandButton } from "../components/ui";
 import { fetchRobotsBySiteAndBlock, sendMqttMulticastDownlink } from "../api/robots";
@@ -219,6 +220,11 @@ function BlockCard({
           const online = isRobotOnline(robot.lora_state);
           const battery = getBatteryPercent(robot.battery_voltage);
           const tileTheme = getRobotTileTheme(online, colors);
+          const lowBattery =
+            online && battery != null && battery < 50;
+          const batteryColor = lowBattery
+            ? colors.badge.warning.text
+            : tileTheme.textColor;
 
           return (
             <Pressable
@@ -251,7 +257,7 @@ function BlockCard({
               <Text
                 style={[
                   styles.robotTileBattery,
-                  { color: tileTheme.textColor },
+                  { color: batteryColor },
                 ]}
               >
                 {battery != null ? `${battery}%` : "—"}
@@ -269,6 +275,7 @@ function BlockCard({
         <CompactCommandButton
           label="Start"
           icon="play"
+          size="xs"
           onPress={() => onBulkCommand(block.block_name, "start")}
           loading={loadingCommand === "start"}
           disabled={!canSendCommands || bulkLoading !== null}
@@ -277,6 +284,7 @@ function BlockCard({
           label="Stop"
           icon="stop"
           tone="danger"
+          size="xs"
           onPress={() => onBulkCommand(block.block_name, "stop")}
           loading={loadingCommand === "stop"}
           disabled={!canSendCommands || bulkLoading !== null}
@@ -284,6 +292,7 @@ function BlockCard({
         <CompactCommandButton
           label="Return"
           icon="return-down-back"
+          size="xs"
           onPress={() => onBulkCommand(block.block_name, "return")}
           loading={loadingCommand === "return"}
           disabled={!canSendCommands || bulkLoading !== null}
@@ -295,6 +304,7 @@ function BlockCard({
 
 export function BlockwiseScreen() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
   const route = useRoute<Route>();
@@ -637,7 +647,10 @@ export function BlockwiseScreen() {
             />
           )}
           ListHeaderComponent={listHeader}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + spacing.xxxl },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -720,7 +733,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   secondaryActionText: {
     ...typography.label,
@@ -873,12 +886,13 @@ const styles = StyleSheet.create({
   },
   robotGrid: {
     flexDirection: "row",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     flexWrap: "wrap",
     gap: spacing.xs,
   },
   robotTile: {
-    width: "19%",
+    width: "14%",
+    maxWidth: 44,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.sm,
     paddingTop: spacing.xs,
@@ -911,7 +925,10 @@ const styles = StyleSheet.create({
   },
   commandRow: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.xs,
+    marginHorizontal: spacing.md,
   },
   messageCard: {
     flexDirection: "row",

@@ -20,6 +20,7 @@ import { Navbar } from '../components/layout';
 import { Button } from '../components/ui';
 import { fetchAssignedSitesDpr } from '../api/technicianDpr';
 import { useAuth } from '../context/AuthContext';
+import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -99,6 +100,7 @@ export function AssignedSitesDprScreen() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
+  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const assignedSites = useMemo(
     () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
@@ -373,7 +375,7 @@ export function AssignedSitesDprScreen() {
             <DprRecordCard record={item} defaultExpanded={index === 0} />
           )}
           ListHeaderComponent={header}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: bottomPad }]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => void loadHistory(true)} />
@@ -471,7 +473,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxxl,
     flexGrow: 1,
   },
   headerContent: {

@@ -81,7 +81,7 @@ export type DprRecord = {
   new_report_date?: string;
   createdAt?: string;
   robots_operational_details?: DprOperationalDetails;
-  last_activity?: DprLastActivity[];
+  last_activity?: DprLastActivity | DprLastActivity[];
   technician_present?: DprTechnician[];
 };
 

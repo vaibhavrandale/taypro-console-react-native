@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button } from '../ui';
 import type { BadgeVariant } from '../ui/Badge';
+import { PmImageLightbox } from '../pm/PmImageLightbox';
 import { useNotification } from '../../context/NotificationContext';
 import { useStatusBarOverlay } from '../../context/StatusBarOverlayContext';
 import { useTheme } from '../../theme';
@@ -94,12 +96,14 @@ export function CustomNotificationModal() {
   const { notification, visible, submitting, error, submitRead } =
     useNotification();
   const [feedback, setFeedback] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useStatusBarOverlay(visible);
 
   useEffect(() => {
     if (!visible) {
       setFeedback('');
+      setLightboxIndex(null);
     }
   }, [visible, notification?._id]);
 
@@ -107,6 +111,16 @@ export function CustomNotificationModal() {
     () => (notification ? getNotificationTone(notification) : null),
     [notification],
   );
+
+  const attachmentImages = useMemo(() => {
+    const urls = (notification?.images ?? []).filter(
+      (uri): uri is string => typeof uri === 'string' && uri.trim().length > 0,
+    );
+    return urls.map((src, index) => ({
+      src: src.trim(),
+      label: `Attachment ${index + 1}`,
+    }));
+  }, [notification?.images]);
 
   if (!notification || !tone) {
     return null;
@@ -123,6 +137,7 @@ export function CustomNotificationModal() {
   const postedByImage = notification.posted_by?.profile_image;
 
   return (
+    <>
     <Modal
       visible={visible}
       transparent
@@ -265,7 +280,7 @@ export function CustomNotificationModal() {
                 />
               </View>
 
-              {notification.images && notification.images.length > 0 ? (
+              {attachmentImages.length > 0 ? (
                 <View style={styles.attachmentsBlock}>
                   <Text
                     style={[styles.messageLabel, { color: colors.textMuted }]}
@@ -273,16 +288,22 @@ export function CustomNotificationModal() {
                     Attachments
                   </Text>
                   <View style={styles.imagesRow}>
-                    {notification.images.map((uri, index) => (
-                      <Image
+                    {attachmentImages.map((item, index) => (
+                      <Pressable
                         key={`${notification._id}-image-${index}`}
-                        source={{ uri }}
-                        style={[
-                          styles.imageThumb,
-                          { borderColor: colors.border },
-                        ]}
-                        resizeMode="cover"
-                      />
+                        onPress={() => setLightboxIndex(index)}
+                        accessibilityRole="imagebutton"
+                        accessibilityLabel={`Open ${item.label}`}
+                      >
+                        <Image
+                          source={{ uri: item.src }}
+                          style={[
+                            styles.imageThumb,
+                            { borderColor: colors.border },
+                          ]}
+                          resizeMode="cover"
+                        />
+                      </Pressable>
                     ))}
                   </View>
                 </View>
@@ -416,6 +437,15 @@ export function CustomNotificationModal() {
         </View>
       </KeyboardAvoidingView>
     </Modal>
+
+      {lightboxIndex != null ? (
+        <PmImageLightbox
+          images={attachmentImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      ) : null}
+    </>
   );
 }
 

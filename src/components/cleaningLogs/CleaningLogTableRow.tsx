@@ -24,7 +24,6 @@ import {
   getCleaningNote,
   getCleaningPercentage,
   getDprTechnician,
-  getDprTechnicianName,
   resolveProfileImageUri,
 } from '../../utils/cleaningLogs';
 
@@ -147,9 +146,9 @@ const cleaningWidths = {
 };
 
 const dprWidths = {
-  technician: 180,
+  technician: 200,
   time: 108,
-  remarks: 240,
+  remarks: 220,
   site: 92,
   ready: 52,
   online: 52,
@@ -169,7 +168,8 @@ function TechnicianCell({
 }) {
   const technician = getDprTechnician(record);
   const imageUri = resolveProfileImageUri(technician?.profile_image);
-  const name = getDprTechnicianName(record);
+  const name = technician?.name ?? '—';
+  const email = technician?.email;
 
   return (
     <View style={[styles.technicianCell, { width }]}>
@@ -186,12 +186,22 @@ function TechnicianCell({
           <Ionicons name="person" size={14} color={colors.textMuted} />
         </View>
       )}
-      <Text
-        style={[styles.technicianName, { color: colors.textSecondary }]}
-        numberOfLines={2}
-      >
-        {name}
-      </Text>
+      <View style={styles.technicianText}>
+        <Text
+          style={[styles.technicianName, { color: colors.textSecondary }]}
+          numberOfLines={1}
+        >
+          {name}
+        </Text>
+        {email ? (
+          <Text
+            style={[styles.technicianEmail, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
+            {email}
+          </Text>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -443,11 +453,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  technicianText: {
+    flex: 1,
+    minWidth: 0,
+  },
   technicianName: {
     ...typography.caption,
     fontSize: 10,
     lineHeight: 14,
-    flex: 1,
+  },
+  technicianEmail: {
+    ...typography.caption,
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: '400',
   },
   cell: {
     ...typography.caption,

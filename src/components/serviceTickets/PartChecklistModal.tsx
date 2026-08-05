@@ -1,12 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -47,8 +50,34 @@ export function PartChecklistModal({
 }: Props) {
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useStatusBarOverlay(visible);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [visible]);
 
   const filled = useMemo(
     () => countFilledChecklistFields(fields, responses),
@@ -57,6 +86,13 @@ export function PartChecklistModal({
   const complete = useMemo(
     () => isChecklistComplete(fields, responses),
     [fields, responses],
+  );
+
+  const bottomPad =
+    keyboardHeight > 0 ? keyboardHeight : insets.bottom + spacing.sm;
+  const panelMaxHeight = Math.max(
+    280,
+    windowHeight - insets.top - spacing.sm - bottomPad - spacing.sm,
   );
 
   return (
@@ -75,7 +111,7 @@ export function PartChecklistModal({
           {
             backgroundColor: colors.overlay,
             paddingTop: insets.top + spacing.sm,
-            paddingBottom: insets.bottom + spacing.sm,
+            paddingBottom: bottomPad,
           },
         ]}
       >
@@ -86,46 +122,49 @@ export function PartChecklistModal({
               backgroundColor: colors.surface,
               borderColor: colors.border,
               shadowColor: isDark ? '#000' : '#101936',
+              maxHeight: panelMaxHeight,
             },
           ]}
         >
-          <View style={[styles.accent, { backgroundColor: colors.primary }]} />
+            <View style={[styles.accent, { backgroundColor: colors.primary }]} />
 
-          <View style={styles.header}>
-            <View style={styles.headerText}>
-              <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
-                Part replacement checklist
-              </Text>
-              <Text
-                style={[styles.title, { color: colors.textPrimary }]}
-                numberOfLines={2}
-              >
-                {partLabel || 'Selected part'}
-              </Text>
-              <View style={styles.badgeRow}>
-                <Badge
-                  label={`${filled}/${fields.length} filled`}
-                  variant={complete ? 'success' : 'warning'}
-                  size="sm"
-                />
-                {complete ? (
-                  <Badge label="Complete" variant="success" size="sm" />
-                ) : (
-                  <Badge label="Required" variant="error" size="sm" />
-                )}
+            <View style={styles.header}>
+              <View style={styles.headerText}>
+                <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
+                  Part replacement checklist
+                </Text>
+                <Text
+                  style={[styles.title, { color: colors.textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {partLabel || 'Selected part'}
+                </Text>
+                <View style={styles.badgeRow}>
+                  <Badge
+                    label={`${filled}/${fields.length} filled`}
+                    variant={complete ? 'success' : 'warning'}
+                    size="sm"
+                  />
+                  {complete ? (
+                    <Badge label="Complete" variant="success" size="sm" />
+                  ) : (
+                    <Badge label="Required" variant="error" size="sm" />
+                  )}
+                </View>
               </View>
+              {fields.length === 0 ? (
+                <Pressable onPress={onClose} hitSlop={8}>
+                  <Ionicons name="close" size={22} color={colors.textPrimary} />
+                </Pressable>
+              ) : null}
             </View>
-            {fields.length === 0 ? (
-              <Pressable onPress={onClose} hitSlop={8}>
-                <Ionicons name="close" size={22} color={colors.textPrimary} />
-              </Pressable>
-            ) : null}
-          </View>
 
-          <ScrollView
-            contentContainerStyle={styles.body}
-            keyboardShouldPersistTaps="handled"
-          >
+            <ScrollView
+              contentContainerStyle={styles.body}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+            >
             {loading ? (
               <Text style={[styles.hint, { color: colors.textMuted }]}>
                 Loading checklist...
@@ -136,15 +175,17 @@ export function PartChecklistModal({
                 continue.
               </Text>
             ) : (
-              fields.map((field) => {
+              fields.map((field, index) => {
                 const value = responses[field.field_name] ?? '';
                 const label = formatFieldLabel(field.field_name);
+                const fieldKey =
+                  field._id || `${field.field_name}::${field.input_type}::${index}`;
 
                 if (field.input_type === 'checkbox') {
                   const checked = value === 'Yes';
                   return (
                     <View
-                      key={field.field_name}
+                      key={fieldKey}
                       style={[
                         styles.fieldCard,
                         {
@@ -186,7 +227,7 @@ export function PartChecklistModal({
                 if (field.input_type === 'select') {
                   return (
                     <View
-                      key={field.field_name}
+                      key={fieldKey}
                       style={[
                         styles.fieldCard,
                         {
@@ -216,7 +257,7 @@ export function PartChecklistModal({
 
                 return (
                   <View
-                    key={field.field_name}
+                    key={fieldKey}
                     style={[
                       styles.fieldCard,
                       {
@@ -287,7 +328,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   panel: {
-    maxHeight: '92%',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
     overflow: 'hidden',

@@ -6,6 +6,7 @@ import type {
   ServiceInventoryActivity,
   ServiceInventoryItem,
   ServiceTicket,
+  ServiceTicketDashboardStats,
   ServiceTicketFault,
   ServiceTicketRobot,
   ServiceTicketsPageResult,
@@ -229,6 +230,43 @@ export async function resolveServiceTicket(
   if (!response.ok) {
     throwApiError(payload, 'Failed to resolve service ticket');
   }
+}
+
+export async function fetchServiceTicketDashboardStats(): Promise<ServiceTicketDashboardStats> {
+  const response = await apiFetch('/servicetickets/dashboard-stats');
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throwApiError(payload, 'Failed to load service ticket dashboard');
+  }
+
+  const data =
+    isRecord(payload) && isRecord(payload.data) ? payload.data : null;
+  if (!data) {
+    throw new Error('No dashboard stats returned');
+  }
+
+  const summary = isRecord(data.summary) ? data.summary : {};
+
+  return {
+    summary: {
+      raised: Number(summary.raised ?? 0),
+      resolved: Number(summary.resolved ?? 0),
+      pending: Number(summary.pending ?? 0),
+      avg_pending_days: Number(summary.avg_pending_days ?? 0),
+    },
+    by_site: Array.isArray(data.by_site)
+      ? (data.by_site as ServiceTicketDashboardStats['by_site'])
+      : [],
+    recurring_faults: Array.isArray(data.recurring_faults)
+      ? (data.recurring_faults as ServiceTicketDashboardStats['recurring_faults'])
+      : [],
+    pending_aging: Array.isArray(data.pending_aging)
+      ? (data.pending_aging as ServiceTicketDashboardStats['pending_aging'])
+      : [],
+    oldest_pending: Array.isArray(data.oldest_pending)
+      ? (data.oldest_pending as ServiceTicketDashboardStats['oldest_pending'])
+      : [],
+  };
 }
 
 function coerceId(value: unknown): string | undefined {

@@ -47,7 +47,7 @@ function MainDrawer() {
         drawerType: 'front',
         overlayColor: colors.overlay,
         drawerStyle: {
-          width: 288,
+          width: 240,
           backgroundColor: colors.sidebar,
         },
       }}

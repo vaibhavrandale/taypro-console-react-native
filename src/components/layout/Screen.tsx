@@ -1,15 +1,14 @@
 import React from 'react';
 import {
-  RefreshControl,
   RefreshControlProps,
   ScrollView,
   StyleSheet,
   View,
   ViewStyle,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { spacing } from '../../theme/spacing';
+import { useContentBottomPadding } from '../../hooks/useContentBottomPadding';
 
 type Props = {
   children: React.ReactNode;
@@ -29,14 +28,14 @@ export function Screen({
   refreshControl,
 }: Props) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
+  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const content = (
     <View
       style={[
-        styles.inner,
+        !scroll && styles.inner,
         padded && styles.padded,
-        { paddingBottom: insets.bottom + spacing.lg },
+        { paddingBottom: bottomPad },
         style,
       ]}
     >

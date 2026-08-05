@@ -704,7 +704,10 @@ const styles = StyleSheet.create({
   },
   commandRow: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.xs,
+    marginHorizontal: spacing.md,
     maxWidth: 280,
     alignSelf: "center",
     width: "100%",

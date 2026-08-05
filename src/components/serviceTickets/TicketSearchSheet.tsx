@@ -1,15 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Image,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -39,7 +43,35 @@ export function TicketSearchSheet({
   onSelect,
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [query, setQuery] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    if (!visible) {
+      setKeyboardHeight(0);
+      setQuery('');
+      return;
+    }
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [visible]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -51,6 +83,13 @@ export function TicketSearchSheet({
     );
   }, [items, query]);
 
+  const bottomPad =
+    keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, spacing.sm);
+  const sheetMaxHeight = Math.max(
+    240,
+    windowHeight - bottomPad - insets.top - spacing.lg,
+  );
+
   return (
     <Modal
       visible={visible}
@@ -58,7 +97,14 @@ export function TicketSearchSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View
+        style={[
+          styles.overlay,
+          {
+            paddingBottom: keyboardHeight > 0 ? keyboardHeight : 0,
+          },
+        ]}
+      >
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View
           style={[
@@ -66,6 +112,8 @@ export function TicketSearchSheet({
             {
               backgroundColor: colors.backgroundSecondary,
               borderColor: colors.border,
+              maxHeight: sheetMaxHeight,
+              paddingBottom: Math.max(insets.bottom, spacing.lg),
             },
           ]}
         >
@@ -110,8 +158,9 @@ export function TicketSearchSheet({
 
           <FlatList
             data={filtered}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => `${item.id}::${index}`}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={
               <Text style={[styles.empty, { color: colors.textMuted }]}>
@@ -195,11 +244,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   sheet: {
-    maxHeight: '80%',
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     borderWidth: 1,
-    paddingBottom: spacing.lg,
   },
   header: {
     flexDirection: 'row',

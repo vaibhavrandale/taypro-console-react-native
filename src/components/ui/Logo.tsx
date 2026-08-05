@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
   ViewStyle,
+  type ImageResizeMode,
 } from "react-native";
 import { useTheme } from "../../theme";
 import { radius } from "../../theme/spacing";
@@ -33,6 +34,7 @@ type Props = {
   rounded?: boolean;
   /** Which background the logo sits on. `auto` follows the active theme. */
   background?: LogoBackground;
+  resizeMode?: ImageResizeMode;
   style?: StyleProp<ViewStyle>;
   imageStyle?: StyleProp<ImageStyle>;
 };
@@ -41,6 +43,7 @@ export function Logo({
   size = "md",
   rounded = true,
   background = "auto",
+  resizeMode = "contain",
   style,
   imageStyle,
 }: Props) {
@@ -62,11 +65,11 @@ export function Logo({
       <Image
         source={source}
         style={[
-          { width: dimension, height: dimension },
+          { width: "100%", height: "100%" },
           rounded && { borderRadius: dimension * 0.22 },
           imageStyle,
         ]}
-        resizeMode="contain"
+        resizeMode={resizeMode}
       />
     </View>
   );

@@ -7,6 +7,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Navbar } from '../components/layout';
 import { Badge } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -53,6 +54,7 @@ export function AssignedSitesScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
+  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const sites = (user?.assigned_sites ?? []).filter((site) => site.site_id);
 
@@ -143,6 +145,7 @@ export function AssignedSitesScreen() {
         renderItem={renderSite}
         contentContainerStyle={[
           styles.listContent,
+          { paddingBottom: bottomPad },
           sites.length === 0 && styles.emptyListContent,
         ]}
         ListHeaderComponent={
@@ -184,7 +187,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.xxxl,
   },
   emptyListContent: {
     flexGrow: 1,

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -13,13 +13,15 @@ import { Navbar, Screen } from "../components/layout";
 import { RobotBatterySummary } from "../components/dashboard/RobotBatterySummary";
 import { GatewayMapCard } from "../components/dashboard/GatewayMapCard";
 import { WeatherCard } from "../components/dashboard/WeatherCard";
-import { Badge } from "../components/ui";
+import { Badge, CompactCommandButton } from "../components/ui";
 import { useSiteDetails } from "../context/SiteDetailsContext";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../theme";
 import { radius, spacing } from "../theme/spacing";
 import { typography } from "../theme/typography";
 import { getBatteryPercent, isRobotOnline } from "../utils/robot";
+import { appAlert } from "../utils/appAlert";
+import { sendMqttMulticastDownlink } from "../api/robots";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { MainTabParamList } from "../navigation/MainTabs";
@@ -152,6 +154,9 @@ type TopSummaryCardsProps = {
   };
   onBlockwise: () => void;
   onCleaningLog: () => void;
+  onEmergencyStop: () => void;
+  commandSending: boolean;
+  canSendCommands: boolean;
 };
 
 function TopSummaryCards({
@@ -163,6 +168,9 @@ function TopSummaryCards({
   cleaning,
   onBlockwise,
   onCleaningLog,
+  onEmergencyStop,
+  commandSending,
+  canSendCommands,
 }: TopSummaryCardsProps) {
   const { colors } = useTheme();
   const gatewayPercent =
@@ -183,14 +191,27 @@ function TopSummaryCards({
               Robots
             </Text>
           </View>
-          <Pressable
-            onPress={onBlockwise}
-            style={[styles.topCardAction, { backgroundColor: colors.badge.info.bg }]}
-          >
-            <Text style={[styles.topCardActionText, { color: colors.badge.info.text }]}>
-              Blockwise →
-            </Text>
-          </Pressable>
+          <View style={styles.topCardHeaderActions}>
+            <CompactCommandButton
+              label={commandSending ? "..." : "Stop All"}
+              icon="stop"
+              tone="danger"
+              size="xs"
+              filled
+              onPress={onEmergencyStop}
+              loading={commandSending}
+              disabled={!canSendCommands || commandSending}
+              style={styles.stopAllBtn}
+            />
+            <Pressable
+              onPress={onBlockwise}
+              style={[styles.topCardAction, { backgroundColor: colors.badge.info.bg }]}
+            >
+              <Text style={[styles.topCardActionText, { color: colors.badge.info.text }]}>
+                Blockwise →
+              </Text>
+            </Pressable>
+          </View>
         </View>
         <View style={styles.summaryMetricsRow}>
           <SummaryMetric label="Total" value={totalRobots} color={colors.primary} />
@@ -311,6 +332,7 @@ export function DashboardScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<DashboardNavigationProp>();
+  const [commandSending, setCommandSending] = useState(false);
 
   const {
     assignedSites,
@@ -323,17 +345,20 @@ export function DashboardScreen() {
     refresh,
   } = useSiteDetails();
 
+  const canSendCommands = user?.robot_command_access !== false;
+  const siteRobots = siteDetails?.robots ?? [];
+
   const onlineRobots =
-    siteDetails?.robots.filter((r) => isRobotOnline(r.lora_state)).length ?? 0;
-  const offlineRobots = (siteDetails?.robots.length ?? 0) - onlineRobots;
+    siteRobots.filter((r) => isRobotOnline(r.lora_state)).length;
+  const offlineRobots = siteRobots.length - onlineRobots;
   const onlineGateways =
     siteDetails?.gateways.filter(
       (gateway) => getGatewayStatusVariant(gateway.gateway_status) === "success",
     ).length ?? 0;
 
   const avgBattery = (() => {
-    if (!siteDetails?.robots?.length) return null;
-    const values = siteDetails.robots
+    if (!siteRobots.length) return null;
+    const values = siteRobots
       .map((robot) => getBatteryPercent(robot.battery_voltage))
       .filter((value): value is number => value != null);
     if (!values.length) return null;
@@ -348,6 +373,69 @@ export function DashboardScreen() {
     siteDetails?.gateways.slice(0, GATEWAY_PREVIEW_LIMIT) ?? [];
   const hiddenGateways =
     (siteDetails?.gateways.length ?? 0) - gatewayPreview.length;
+
+  const sendEmergencyStopAll = async () => {
+    if (!selectedSite?.site_id) return;
+
+    const commandable = siteRobots.filter(
+      (robot) => robot.deveui && robot.robot_no,
+    );
+
+    if (!commandable.length) {
+      appAlert("No robots", "No robots with command details at this site.");
+      return;
+    }
+
+    setCommandSending(true);
+
+    try {
+      const result = await sendMqttMulticastDownlink("stop", {
+        siteId: selectedSite.site_id,
+        block: "All",
+        robots: commandable,
+      });
+
+      appAlert(
+        "Command sent",
+        result.message ||
+          `Emergency stop sent to ${commandable.length} robot${
+            commandable.length === 1 ? "" : "s"
+          }.`,
+      );
+    } catch (err) {
+      appAlert(
+        "Command failed",
+        err instanceof Error ? err.message : "Failed to send emergency stop",
+      );
+    } finally {
+      setCommandSending(false);
+    }
+  };
+
+  const openEmergencyStopConfirm = () => {
+    if (!canSendCommands) {
+      appAlert("Access denied", "You do not have robot command access.");
+      return;
+    }
+    if (!siteRobots.length) {
+      appAlert("No robots", "No robots found for this site.");
+      return;
+    }
+
+    appAlert(
+      "Emergency Stop All",
+      `Stop all robots at ${siteTitle}? This sends command 14 to ${siteRobots.length} robot${
+        siteRobots.length === 1 ? "" : "s"
+      }.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Stop All",
+          onPress: () => void sendEmergencyStopAll(),
+        },
+      ],
+    );
+  };
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
@@ -483,7 +571,17 @@ export function DashboardScreen() {
                       },
                     });
                   }}
+                  onEmergencyStop={openEmergencyStopConfirm}
+                  commandSending={commandSending}
+                  canSendCommands={canSendCommands}
                 />
+                {!canSendCommands ? (
+                  <Text
+                    style={[styles.commandAccessHint, { color: colors.textMuted }]}
+                  >
+                    Robot command access is disabled for your account.
+                  </Text>
+                ) : null}
                 {siteDetails.weather &&
                 Object.keys(siteDetails.weather).length > 0 ? (
                   <WeatherCard weather={siteDetails.weather} />
@@ -665,6 +763,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: spacing.sm,
   },
+  topCardHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  stopAllBtn: {
+    flex: 0,
+    flexDirection: "row",
+    minHeight: 22,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    gap: 2,
+  },
   topCardTitleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -836,5 +947,10 @@ const styles = StyleSheet.create({
   },
   stateText: {
     ...typography.bodySmall,
+  },
+  commandAccessHint: {
+    ...typography.caption,
+    marginBottom: spacing.md,
+    textAlign: "center",
   },
 });

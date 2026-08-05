@@ -3,6 +3,8 @@ import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
   Image,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -168,8 +170,9 @@ export function ResolveServiceTicketScreen() {
 
   const inventoryItems: SearchSheetItem[] = useMemo(
     () =>
-      inventory.map((item) => ({
-        id: item.item_id,
+      inventory.map((item, index) => ({
+        // Same catalog item can appear per site — keep list keys unique
+        id: item._id || `${item.item_id}::${item.site_id ?? ''}::${index}`,
         title: `${item.item_name} · ${item.item_code}`,
         subtitle: [
           item.site_id,
@@ -250,7 +253,10 @@ export function ResolveServiceTicketScreen() {
   };
 
   const selectPart = async (item: SearchSheetItem) => {
-    const inv = inventory.find((row) => row.item_id === item.id);
+    const inv = inventory.find((row, index) => {
+      const key = row._id || `${row.item_id}::${row.site_id ?? ''}::${index}`;
+      return key === item.id || row.item_id === item.id;
+    });
     if (!inv || !activePartKey) return;
 
     const next: PartRow = {
@@ -450,12 +456,18 @@ export function ResolveServiceTicketScreen() {
             />
           </View>
 
+          <KeyboardAvoidingView
+            style={styles.flex}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+          >
           <ScrollView
             contentContainerStyle={[
               styles.content,
               { paddingBottom: insets.bottom + spacing.xxl + spacing.md },
             ]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
           >
           <View
             style={[
@@ -797,6 +809,7 @@ export function ResolveServiceTicketScreen() {
             onRemove={(index) => setResolvedImage(index, '')}
           />
         </ScrollView>
+          </KeyboardAvoidingView>
         </>
       )}
 
@@ -847,6 +860,7 @@ const EMPTY_IMAGES = ['', '', '', '', ''];
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  flex: { flex: 1 },
   backBtn: {
     width: 34,
     height: 34,

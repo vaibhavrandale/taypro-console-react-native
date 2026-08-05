@@ -19,12 +19,13 @@ export function buildGatewayLeafletHtml(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Blinker:wght@400;600;700&display=swap" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    html, body, #map { margin: 0; height: 100%; width: 100%; background: #1a1a1a; }
+    html, body, #map { margin: 0; height: 100%; width: 100%; background: #1a1a1a; font-family: 'Blinker', sans-serif; }
     .leaflet-control-attribution { font-size: 9px; }
     .leaflet-control-layers { font-size: 11px; }
-    .gateway-popup { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 12px; line-height: 1.45; }
+    .gateway-popup { font-family: 'Blinker', sans-serif; font-size: 12px; line-height: 1.45; }
     .gateway-popup strong { display: block; margin-bottom: 4px; font-size: 13px; }
   </style>
 </head>
@@ -37,7 +38,7 @@ export function buildGatewayLeafletHtml(
     const radiusMeters = ${RADIUS_METERS};
 
     if (!gateways.length && (!user || user.latitude == null || user.longitude == null)) {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8B9DC3;font-family:sans-serif;font-size:13px;padding:16px;text-align:center;">No gateway coordinates available</div>';
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8B9DC3;font-family:Blinker,sans-serif;font-size:13px;padding:16px;text-align:center;">No gateway coordinates available</div>';
     } else {
       const map = L.map('map', { zoomControl: true, attributionControl: true });
 

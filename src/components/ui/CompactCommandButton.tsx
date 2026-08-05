@@ -20,6 +20,7 @@ type Props = {
   disabled?: boolean;
   tone?: 'default' | 'danger';
   size?: 'sm' | 'xs';
+  filled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -31,11 +32,13 @@ export function CompactCommandButton({
   disabled = false,
   tone = 'default',
   size = 'sm',
+  filled = false,
   style,
 }: Props) {
   const { colors } = useTheme();
   const isDisabled = disabled || loading;
   const accentColor = tone === 'danger' ? colors.danger : colors.primary;
+  const contentColor = filled ? '#FFFFFF' : accentColor;
   const isXs = size === 'xs';
 
   return (
@@ -47,7 +50,7 @@ export function CompactCommandButton({
         isXs && styles.baseXs,
         {
           borderColor: accentColor,
-          backgroundColor: colors.backgroundTertiary,
+          backgroundColor: filled ? accentColor : colors.backgroundTertiary,
         },
         isDisabled && styles.disabled,
         pressed && !isDisabled && styles.pressed,
@@ -55,15 +58,15 @@ export function CompactCommandButton({
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={accentColor} />
+        <ActivityIndicator size="small" color={contentColor} />
       ) : (
         <>
-          <Ionicons name={icon} size={isXs ? 12 : 15} color={accentColor} />
+          <Ionicons name={icon} size={isXs ? 11 : 13} color={contentColor} />
           <Text
             style={[
               styles.label,
               isXs && styles.labelXs,
-              { color: accentColor },
+              { color: contentColor },
             ]}
             numberOfLines={1}
           >
@@ -77,26 +80,29 @@ export function CompactCommandButton({
 
 const styles = StyleSheet.create({
   base: {
-    flex: 1,
-    minHeight: 44,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: 'row',
+    minHeight: 28,
     borderRadius: radius.sm,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
     gap: 2,
   },
   baseXs: {
-    minHeight: 32,
-    paddingVertical: 4,
-    gap: 1,
+    minHeight: 22,
+    paddingVertical: 1,
+    paddingHorizontal: 4,
+    gap: 2,
   },
   label: {
     ...typography.caption,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: 0.15,
     textTransform: 'uppercase',
   },
   labelXs: {

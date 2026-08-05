@@ -142,6 +142,50 @@ export type ServiceTicketsPageResult = {
   hasPrevPage: boolean;
 };
 
+export type ServiceTicketDashboardSummary = {
+  raised: number;
+  resolved: number;
+  pending: number;
+  avg_pending_days: number;
+};
+
+export type ServiceTicketDashboardSiteStat = {
+  site_id: string;
+  raised: number;
+  resolved: number;
+  pending: number;
+  avg_pending_days: number;
+};
+
+export type ServiceTicketDashboardFaultStat = {
+  fault_type: string;
+  count: number;
+  pending: number;
+};
+
+export type ServiceTicketDashboardAgingBucket = {
+  label: string;
+  count: number;
+};
+
+export type ServiceTicketDashboardOldestPending = {
+  _id: string;
+  ticket_id?: string;
+  robot_no?: string;
+  site_id?: string;
+  fault_type?: string;
+  createdAt?: string;
+  days_pending?: number;
+};
+
+export type ServiceTicketDashboardStats = {
+  summary: ServiceTicketDashboardSummary;
+  by_site: ServiceTicketDashboardSiteStat[];
+  recurring_faults: ServiceTicketDashboardFaultStat[];
+  pending_aging: ServiceTicketDashboardAgingBucket[];
+  oldest_pending: ServiceTicketDashboardOldestPending[];
+};
+
 export type CreateServiceTicketPayload = {
   robot_no: string;
   deveui?: string;

@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FlatList,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
@@ -34,14 +38,53 @@ export function UptimeSelectField({
   icon = 'chevron-down-outline',
 }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [open, setOpen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) {
+      setKeyboardHeight(0);
+      return;
+    }
+
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [open]);
+
+  const openSheet = () => {
+    Keyboard.dismiss();
+    setOpen(true);
+  };
+
+  const bottomPad =
+    keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, spacing.sm);
+  const sheetMaxHeight = Math.min(
+    windowHeight * 0.55,
+    Math.max(200, windowHeight - bottomPad - insets.top - spacing.lg),
+  );
 
   return (
     <>
       <Pressable
-        onPress={() => setOpen(true)}
+        onPress={openSheet}
         style={[
           styles.field,
           {
@@ -81,6 +124,9 @@ export function UptimeSelectField({
               {
                 backgroundColor: colors.backgroundSecondary,
                 borderColor: colors.border,
+                maxHeight: sheetMaxHeight,
+                marginBottom: keyboardHeight > 0 ? keyboardHeight : 0,
+                paddingBottom: Math.max(insets.bottom, spacing.lg),
               },
             ]}
           >
@@ -99,6 +145,7 @@ export function UptimeSelectField({
               data={options}
               keyExtractor={(item) => String(item.value)}
               style={styles.list}
+              keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
                 const active = item.value === value;
                 const disabled = item.disabled;
@@ -185,7 +232,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.35)',
   },
   sheet: {
-    maxHeight: '55%',
     borderTopWidth: 1,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
