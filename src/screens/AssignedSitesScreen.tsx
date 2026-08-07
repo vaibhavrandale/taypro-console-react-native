@@ -127,6 +127,16 @@ export function AssignedSitesScreen() {
               })
             }
           />
+          <SiteActionLink
+            label="Tracking"
+            icon="navigate-outline"
+            onPress={() =>
+              navigation.navigate('RobotTracking', {
+                siteId: item.site_id,
+                siteName,
+              })
+            }
+          />
         </View>
       </View>
     );

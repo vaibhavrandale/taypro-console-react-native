@@ -47,6 +47,13 @@ export type DrawerParamList = {
         siteName?: string;
       }
     | undefined;
+  RobotTracking:
+    | {
+        siteId?: string;
+        siteName?: string;
+      }
+    | undefined;
+  RobotCommands: undefined;
   RobotActivity: undefined;
   Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;

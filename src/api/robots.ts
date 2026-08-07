@@ -142,6 +142,26 @@ export async function fetchRobotByRobotNo(robotNo: string) {
   return normalizeRobotDetails(payload);
 }
 
+export async function fetchRobotsBySite(siteId: string) {
+  const encoded = encodeURIComponent(siteId);
+  const response = await apiFetch(
+    `/robots/get-all-robots-sitewise/${encoded}`,
+  );
+  const payload = await parseJson(response);
+
+  if (!isRecord(payload)) return [] as BlockRobotSummary[];
+
+  if (Array.isArray(payload.data)) {
+    return payload.data as BlockRobotSummary[];
+  }
+
+  if (Array.isArray(payload.robots)) {
+    return payload.robots as BlockRobotSummary[];
+  }
+
+  return [] as BlockRobotSummary[];
+}
+
 export async function sendMqttDownlink(
   command: RobotCommand,
   robot: Pick<

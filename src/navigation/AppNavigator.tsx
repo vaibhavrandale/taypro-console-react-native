@@ -21,12 +21,14 @@ import { PreventiveMaintenanceStack } from './PreventiveMaintenanceStack';
 import { ExpenseClaimsStack } from './ExpenseClaimsStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
 import { RobotActivityScreen } from '../screens/RobotActivityScreen';
+import { RobotCommandsScreen } from '../screens/RobotCommandsScreen';
 import { BlockwiseScreen } from '../screens/BlockwiseScreen';
 import { BlockManagementScreen } from '../screens/BlockManagementScreen';
 import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
 import { GatewayDetailScreen } from '../screens/GatewayDetailScreen';
 import { GatewaysScreen } from '../screens/GatewaysScreen';
 import { RobotUptimeScreen } from '../screens/RobotUptimeScreen';
+import { RobotTrackingScreen } from '../screens/RobotTrackingScreen';
 import { ServiceInventoryScreen } from '../screens/ServiceInventoryScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
@@ -55,9 +57,14 @@ function MainDrawer() {
       <Drawer.Screen name="MainTabs" component={MainTabs} options={{ title: 'Home' }} />
       <Drawer.Screen name="Robots" component={RobotsScreen} />
       <Drawer.Screen
+        name="RobotCommands"
+        component={RobotCommandsScreen}
+        options={{ title: 'Robot Commands' }}
+      />
+      <Drawer.Screen
         name="RobotActivity"
         component={RobotActivityScreen}
-        options={{ title: 'Robot Commands' }}
+        options={{ title: 'Command Activity' }}
       />
       <Drawer.Screen
         name="Blockwise"
@@ -82,6 +89,11 @@ function MainDrawer() {
       <Drawer.Screen name="Sites" component={SitesStack} />
       <Drawer.Screen name="Gateways" component={GatewaysScreen} />
       <Drawer.Screen name="RobotUptime" component={RobotUptimeScreen} />
+      <Drawer.Screen
+        name="RobotTracking"
+        component={RobotTrackingScreen}
+        options={{ title: 'Robot Tracking' }}
+      />
       <Drawer.Screen name="Timers" component={TimersStack} />
       <Drawer.Screen name="Users">
         {() => (

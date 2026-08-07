@@ -28,6 +28,7 @@ type Props = {
   options: UptimeSelectOption[];
   onChange: (value: string | number) => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  compact?: boolean;
 };
 
 export function UptimeSelectField({
@@ -36,6 +37,7 @@ export function UptimeSelectField({
   options,
   onChange,
   icon = 'chevron-down-outline',
+  compact = false,
 }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -87,23 +89,34 @@ export function UptimeSelectField({
         onPress={openSheet}
         style={[
           styles.field,
+          compact && styles.fieldCompact,
           {
             backgroundColor: colors.backgroundSecondary,
             borderColor: colors.border,
           },
         ]}
       >
-        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+        <Text
+          style={[
+            styles.fieldLabel,
+            compact && styles.fieldLabelCompact,
+            { color: colors.textMuted },
+          ]}
+        >
           {label}
         </Text>
         <View style={styles.fieldValueRow}>
           <Text
-            style={[styles.fieldValue, { color: colors.textPrimary }]}
+            style={[
+              styles.fieldValue,
+              compact && styles.fieldValueCompact,
+              { color: colors.textPrimary },
+            ]}
             numberOfLines={1}
           >
             {selected?.label ?? 'Select'}
           </Text>
-          <Ionicons name={icon} size={16} color={colors.textMuted} />
+          <Ionicons name={icon} size={compact ? 14 : 16} color={colors.textMuted} />
         </View>
       </Pressable>
 
@@ -197,7 +210,8 @@ export function UptimeSelectField({
 
 const styles = StyleSheet.create({
   field: {
-    flex: 1,
+    alignSelf: 'stretch',
+    width: '100%',
     minWidth: 0,
     borderWidth: 1,
     borderRadius: radius.md,
@@ -205,12 +219,22 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: 4,
   },
+  fieldCompact: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 1,
+    borderRadius: radius.sm,
+  },
   fieldLabel: {
     ...typography.caption,
     fontSize: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.4,
     fontWeight: '700',
+  },
+  fieldLabelCompact: {
+    fontSize: 9,
+    letterSpacing: 0.2,
   },
   fieldValueRow: {
     flexDirection: 'row',
@@ -222,6 +246,9 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 13,
     flex: 1,
+  },
+  fieldValueCompact: {
+    fontSize: 12,
   },
   overlay: {
     flex: 1,

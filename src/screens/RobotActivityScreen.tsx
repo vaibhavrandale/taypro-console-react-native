@@ -297,7 +297,7 @@ export function RobotActivityScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Navbar
-        title="Robot Commands"
+        title="Command Activity"
         subtitle="Command activity log"
         showRobotActivity={false}
       />

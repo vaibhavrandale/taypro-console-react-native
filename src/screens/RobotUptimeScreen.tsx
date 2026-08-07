@@ -331,20 +331,24 @@ export function RobotUptimeScreen() {
       />
 
       <View style={styles.filtersRow}>
-        <UptimeSelectField
-          label="Month"
-          value={month}
-          options={monthOptions}
-          onChange={(value) => setMonth(Number(value))}
-          icon="calendar-outline"
-        />
-        <UptimeSelectField
-          label="Year"
-          value={year}
-          options={yearOptions}
-          onChange={handleYearChange}
-          icon="time-outline"
-        />
+        <View style={styles.filterHalf}>
+          <UptimeSelectField
+            label="Month"
+            value={month}
+            options={monthOptions}
+            onChange={(value) => setMonth(Number(value))}
+            icon="calendar-outline"
+          />
+        </View>
+        <View style={styles.filterHalf}>
+          <UptimeSelectField
+            label="Year"
+            value={year}
+            options={yearOptions}
+            onChange={handleYearChange}
+            icon="time-outline"
+          />
+        </View>
       </View>
 
       <Text style={[styles.filtersHint, { color: colors.textMuted }]}>
@@ -534,6 +538,10 @@ const styles = StyleSheet.create({
   filtersRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  filterHalf: {
+    flex: 1,
+    minWidth: 0,
   },
   filtersHint: {
     ...typography.caption,

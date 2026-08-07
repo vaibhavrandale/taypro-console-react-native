@@ -4,6 +4,16 @@ export function isRobotOnline(loraState?: number) {
   return loraState === 1;
 }
 
+/** Marker color: yellow when cleaning in progress, else green online / red offline. */
+export function getRobotMarkerColor(
+  loraState?: number,
+  lastStatus?: string | null,
+) {
+  const status = (lastStatus ?? '').trim().toLowerCase();
+  if (status === 'cleaning in progress') return '#eab308';
+  return isRobotOnline(loraState) ? '#22c55e' : '#ef4444';
+}
+
 export function getBatteryPercent(battery?: number | null) {
   if (battery == null || Number.isNaN(battery)) return null;
   return Math.max(0, Math.min(100, Math.round(battery)));

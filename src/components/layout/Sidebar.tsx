@@ -65,8 +65,18 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         icon: "stats-chart-outline",
       },
       {
-        name: "RobotActivity",
+        name: "RobotTracking",
+        label: "Robot Tracking",
+        icon: "navigate-outline",
+      },
+      {
+        name: "RobotCommands",
         label: "Robot Commands",
+        icon: "send-outline",
+      },
+      {
+        name: "RobotActivity",
+        label: "Command Activity",
         icon: "hardware-chip-outline",
       },
       { name: "Timers", label: "Timers", icon: "timer-outline" },

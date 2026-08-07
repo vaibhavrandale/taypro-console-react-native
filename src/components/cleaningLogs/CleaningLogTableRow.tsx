@@ -56,8 +56,8 @@ function Cell({ width, children, colors, bold }: { width: number; children: Reac
     <Text
       style={[
         styles.cell,
-        { width, color: bold ? colors.textPrimary : colors.textSecondary },
         bold && styles.cellBold,
+        { width, color: bold ? colors.textPrimary : colors.textSecondary },
       ]}
       numberOfLines={2}
     >
@@ -425,11 +425,11 @@ const styles = StyleSheet.create({
   },
   headerCell: {
     ...typography.caption,
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.2,
-    lineHeight: 12,
+    lineHeight: 14,
   },
   row: {
     flexDirection: 'row',
@@ -459,22 +459,21 @@ const styles = StyleSheet.create({
   },
   technicianName: {
     ...typography.caption,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 12,
+    lineHeight: 16,
   },
   technicianEmail: {
     ...typography.caption,
-    fontSize: 9,
-    lineHeight: 12,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: '400',
   },
   cell: {
     ...typography.caption,
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 13,
+    lineHeight: 18,
   },
   cellBold: {
     fontWeight: '600',
-    color: undefined,
   },
 });
