@@ -22,6 +22,7 @@ import {
   canAccessAttendance,
   canAccessExpenses,
   canAccessPreventiveMaintenance,
+  canAccessServiceInventory,
   canSubmitDpr,
 } from "../../utils/roles";
 
@@ -122,7 +123,10 @@ function buildMenuSections(role?: string): MenuSection[] {
     });
   }
 
-  const managementItems = [...BASE_MENU_SECTIONS[2].items];
+  const managementItems = BASE_MENU_SECTIONS[2].items.filter(
+    (item) =>
+      item.name !== "ServiceInventory" || canAccessServiceInventory(role),
+  );
   if (canAccessPreventiveMaintenance(role)) {
     const ticketsIndex = managementItems.findIndex(
       (item) => item.name === "ServiceTickets",

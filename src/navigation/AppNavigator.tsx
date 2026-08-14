@@ -13,6 +13,8 @@ import { useTheme } from '../theme';
 import { Sidebar } from '../components/layout';
 import { LoginScreen } from '../screens/LoginScreen';
 import { PlaceholderScreen } from '../screens/PlaceholderScreen';
+import { UsersScreen } from '../screens/UsersScreen';
+import { VoiceCallModal } from '../screens/VoiceCallModal';
 import { MainTabs } from './MainTabs';
 import { SitesStack } from './SitesStack';
 import { TimersStack } from './TimersStack';
@@ -95,14 +97,7 @@ function MainDrawer() {
         options={{ title: 'Robot Tracking' }}
       />
       <Drawer.Screen name="Timers" component={TimersStack} />
-      <Drawer.Screen name="Users">
-        {() => (
-          <PlaceholderScreen
-            title="Users"
-            description="Browse technicians and console users by role and department."
-          />
-        )}
-      </Drawer.Screen>
+      <Drawer.Screen name="Users" component={UsersScreen} options={{ title: 'Users' }} />
       <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
       <Drawer.Screen
         name="ServiceInventory"
@@ -127,6 +122,7 @@ function MainDrawer() {
       <GlobalSearchModal />
       <CustomNotificationModal />
       <TimerExecutionNotificationModal />
+      <VoiceCallModal />
     </>
   );
 }

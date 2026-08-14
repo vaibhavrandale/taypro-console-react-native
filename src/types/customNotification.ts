@@ -21,7 +21,8 @@ export type CustomNotification = {
   _id: string;
   subject: string;
   description: string;
-  points?: unknown[];
+  points?: string[];
+  link?: string;
   posted_by?: NotificationPostedBy;
   users?: NotificationUser[];
   for_user_roles?: string[];

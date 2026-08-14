@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -11,19 +12,19 @@ import {
   TextInput,
   useWindowDimensions,
   View,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Badge, Button } from '../ui';
-import type { BadgeVariant } from '../ui/Badge';
-import { PmImageLightbox } from '../pm/PmImageLightbox';
-import { useNotification } from '../../context/NotificationContext';
-import { useStatusBarOverlay } from '../../context/StatusBarOverlayContext';
-import { useTheme } from '../../theme';
-import { radius, spacing } from '../../theme/spacing';
-import { typography } from '../../theme/typography';
-import type { CustomNotification } from '../../types/customNotification';
-import { formatDateTimeIST } from '../../utils/datetime';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Badge, Button } from "../ui";
+import type { BadgeVariant } from "../ui/Badge";
+import { PmImageLightbox } from "../pm/PmImageLightbox";
+import { useNotification } from "../../context/NotificationContext";
+import { useStatusBarOverlay } from "../../context/StatusBarOverlayContext";
+import { useTheme } from "../../theme";
+import { radius, spacing } from "../../theme/spacing";
+import { typography } from "../../theme/typography";
+import type { CustomNotification } from "../../types/customNotification";
+import { formatDateTimeIST } from "../../utils/datetime";
 
 function getNotificationTone(notification: CustomNotification): {
   variant: BadgeVariant;
@@ -32,46 +33,46 @@ function getNotificationTone(notification: CustomNotification): {
 } {
   if (notification.is_feedback_required) {
     return {
-      variant: 'purple',
-      icon: 'chatbox-ellipses-outline',
-      label: 'Feedback required',
+      variant: "purple",
+      icon: "chatbox-ellipses-outline",
+      label: "Feedback required",
     };
   }
 
   const subject = notification.subject.toLowerCase();
   if (
-    subject.includes('failure') ||
-    subject.includes('alert') ||
-    subject.includes('error')
+    subject.includes("failure") ||
+    subject.includes("alert") ||
+    subject.includes("error")
   ) {
     return {
-      variant: 'error',
-      icon: 'warning-outline',
-      label: 'Action required',
+      variant: "error",
+      icon: "warning-outline",
+      label: "Action required",
     };
   }
 
   return {
-    variant: 'info',
-    icon: 'notifications-outline',
-    label: 'Announcement',
+    variant: "info",
+    icon: "notifications-outline",
+    label: "Announcement",
   };
 }
 
 function DescriptionBody({ text, color }: { text: string; color: string }) {
-  const lines = text.split('\n').filter((line) => line.trim().length > 0);
+  const lines = text.split("\n").filter((line) => line.trim().length > 0);
 
   return (
     <View style={styles.descriptionBlock}>
       {lines.map((line, index) => {
         const isSection =
-          line.includes(':') &&
-          (line.startsWith('🏭') ||
-            line.startsWith('🤖') ||
-            line.startsWith('⚠️') ||
-            line.startsWith('🟢') ||
-            line.startsWith('🔴') ||
-            line.startsWith('🔧'));
+          line.includes(":") &&
+          (line.startsWith("🏭") ||
+            line.startsWith("🤖") ||
+            line.startsWith("⚠️") ||
+            line.startsWith("🟢") ||
+            line.startsWith("🔴") ||
+            line.startsWith("🔧"));
 
         return (
           <Text
@@ -95,14 +96,14 @@ export function CustomNotificationModal() {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { notification, visible, submitting, error, submitRead } =
     useNotification();
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState("");
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useStatusBarOverlay(visible);
 
   useEffect(() => {
     if (!visible) {
-      setFeedback('');
+      setFeedback("");
       setLightboxIndex(null);
     }
   }, [visible, notification?._id]);
@@ -114,13 +115,28 @@ export function CustomNotificationModal() {
 
   const attachmentImages = useMemo(() => {
     const urls = (notification?.images ?? []).filter(
-      (uri): uri is string => typeof uri === 'string' && uri.trim().length > 0,
+      (uri): uri is string => typeof uri === "string" && uri.trim().length > 0,
     );
     return urls.map((src, index) => ({
       src: src.trim(),
       label: `Attachment ${index + 1}`,
     }));
   }, [notification?.images]);
+
+  const points = useMemo(() => {
+    return (notification?.points ?? [])
+      .map((point) =>
+        typeof point === "string" ? point.trim() : String(point ?? "").trim(),
+      )
+      .filter((point) => point.length > 0);
+  }, [notification?.points]);
+
+  const linkUrl = useMemo(() => {
+    const raw = notification?.link?.trim() ?? "";
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://${raw}`;
+  }, [notification?.link]);
 
   if (!notification || !tone) {
     return null;
@@ -132,311 +148,397 @@ export function CustomNotificationModal() {
   const maxPanelHeight =
     windowHeight - insets.top - insets.bottom - spacing.xl * 2;
 
-  const postedByName = notification.posted_by?.name ?? 'System';
-  const postedByRole = notification.posted_by?.role ?? 'Automated alert';
+  const postedByName = notification.posted_by?.name ?? "System";
+  const postedByRole = notification.posted_by?.role ?? "Automated alert";
   const postedByImage = notification.posted_by?.profile_image;
 
   return (
     <>
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={() => {
-        // Acknowledgement is required before dismiss.
-      }}
-    >
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          // Acknowledgement is required before dismiss.
+        }}
       >
-        <View
-          style={[
-            styles.backdrop,
-            {
-              backgroundColor: colors.overlay,
-              paddingTop: insets.top + spacing.sm,
-              paddingBottom: insets.bottom + spacing.sm,
-            },
-          ]}
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <View
             style={[
-              styles.panel,
+              styles.backdrop,
               {
-                width: panelWidth,
-                maxHeight: maxPanelHeight,
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                shadowColor: isDark ? '#000' : '#101936',
+                backgroundColor: colors.overlay,
+                paddingTop: insets.top + spacing.sm,
+                paddingBottom: insets.bottom + spacing.sm,
               },
             ]}
           >
             <View
               style={[
-                styles.accentBar,
-                { backgroundColor: colors.badge[tone.variant].text },
+                styles.panel,
+                {
+                  width: panelWidth,
+                  maxHeight: maxPanelHeight,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  shadowColor: isDark ? "#000" : "#101936",
+                },
               ]}
-            />
-
-            <View style={styles.panelHeader}>
-              <View style={styles.panelHeaderTop}>
-                <View
-                  style={[
-                    styles.iconWrap,
-                    { backgroundColor: colors.badge[tone.variant].bg },
-                  ]}
-                >
-                  <Ionicons
-                    name={tone.icon}
-                    size={18}
-                    color={colors.badge[tone.variant].text}
-                  />
-                </View>
-                <View style={styles.panelHeaderText}>
-                  <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
-                    Inbox notification
-                  </Text>
-                  <View style={styles.badgeRow}>
-                    <Badge label={tone.label} variant={tone.variant} size="sm" />
-                    <Badge label="Unread" variant="warning" size="sm" />
-                  </View>
-                </View>
-              </View>
-
-              <Text style={[styles.subject, { color: colors.textPrimary }]}>
-                {notification.subject}
-              </Text>
-
-              <View
-                style={[
-                  styles.metaCard,
-                  {
-                    backgroundColor: colors.backgroundTertiary,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                {postedByImage ? (
-                  <Image
-                    source={{ uri: postedByImage }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.avatarFallback,
-                      { backgroundColor: colors.badge.info.bg },
-                    ]}
-                  >
-                    <Ionicons
-                      name="person-outline"
-                      size={16}
-                      color={colors.badge.info.text}
-                    />
-                  </View>
-                )}
-                <View style={styles.metaText}>
-                  <Text
-                    style={[styles.metaName, { color: colors.textPrimary }]}
-                    numberOfLines={1}
-                  >
-                    {postedByName}
-                  </Text>
-                  <Text
-                    style={[styles.metaSub, { color: colors.textMuted }]}
-                    numberOfLines={1}
-                  >
-                    {postedByRole}
-                    {notification.createdAt
-                      ? ` · ${formatDateTimeIST(notification.createdAt)}`
-                      : ''}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <ScrollView
-              style={styles.bodyScroll}
-              contentContainerStyle={styles.bodyContent}
-              showsVerticalScrollIndicator
-              keyboardShouldPersistTaps="handled"
             >
               <View
                 style={[
-                  styles.messageCard,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.border,
-                  },
+                  styles.accentBar,
+                  { backgroundColor: colors.badge[tone.variant].text },
                 ]}
-              >
-                <Text style={[styles.messageLabel, { color: colors.textMuted }]}>
-                  Message
-                </Text>
-                <DescriptionBody
-                  text={notification.description}
-                  color={colors.textSecondary}
-                />
-              </View>
+              />
 
-              {attachmentImages.length > 0 ? (
-                <View style={styles.attachmentsBlock}>
-                  <Text
-                    style={[styles.messageLabel, { color: colors.textMuted }]}
+              <View style={styles.panelHeader}>
+                <View style={styles.panelHeaderTop}>
+                  <View
+                    style={[
+                      styles.iconWrap,
+                      { backgroundColor: colors.badge[tone.variant].bg },
+                    ]}
                   >
-                    Attachments
-                  </Text>
-                  <View style={styles.imagesRow}>
-                    {attachmentImages.map((item, index) => (
-                      <Pressable
-                        key={`${notification._id}-image-${index}`}
-                        onPress={() => setLightboxIndex(index)}
-                        accessibilityRole="imagebutton"
-                        accessibilityLabel={`Open ${item.label}`}
-                      >
-                        <Image
-                          source={{ uri: item.src }}
-                          style={[
-                            styles.imageThumb,
-                            { borderColor: colors.border },
-                          ]}
-                          resizeMode="cover"
-                        />
-                      </Pressable>
-                    ))}
+                    <Ionicons
+                      name={tone.icon}
+                      size={18}
+                      color={colors.badge[tone.variant].text}
+                    />
+                  </View>
+                  <View style={styles.panelHeaderText}>
+                    <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
+                      notification
+                    </Text>
+                    <View style={styles.badgeRow}>
+                      <Badge
+                        label={tone.label}
+                        variant={tone.variant}
+                        size="sm"
+                      />
+                      <Badge label="Unread" variant="warning" size="sm" />
+                    </View>
                   </View>
                 </View>
-              ) : null}
 
-              {requiresFeedback ? (
+                <Text style={[styles.subject, { color: colors.textPrimary }]}>
+                  {notification.subject}
+                </Text>
+
                 <View
                   style={[
-                    styles.feedbackCard,
+                    styles.metaCard,
+                    {
+                      backgroundColor: colors.backgroundTertiary,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  {postedByImage ? (
+                    <Image
+                      source={{ uri: postedByImage }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.avatarFallback,
+                        { backgroundColor: colors.badge.info.bg },
+                      ]}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={16}
+                        color={colors.badge.info.text}
+                      />
+                    </View>
+                  )}
+                  <View style={styles.metaText}>
+                    <Text
+                      style={[styles.metaName, { color: colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {postedByName}
+                    </Text>
+                    <Text
+                      style={[styles.metaSub, { color: colors.textMuted }]}
+                      numberOfLines={1}
+                    >
+                      {postedByRole}
+                      {notification.createdAt
+                        ? ` · ${formatDateTimeIST(notification.createdAt)}`
+                        : ""}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <ScrollView
+                style={styles.bodyScroll}
+                contentContainerStyle={styles.bodyContent}
+                showsVerticalScrollIndicator
+                keyboardShouldPersistTaps="handled"
+              >
+                <View
+                  style={[
+                    styles.messageCard,
                     {
                       backgroundColor: colors.backgroundSecondary,
                       borderColor: colors.border,
                     },
                   ]}
                 >
-                  <View style={styles.feedbackHeader}>
+                  <Text
+                    style={[styles.messageLabel, { color: colors.textMuted }]}
+                  >
+                    Message
+                  </Text>
+                  <DescriptionBody
+                    text={notification.description}
+                    color={colors.textSecondary}
+                  />
+                </View>
+
+                {points.length > 0 ? (
+                  <View
+                    style={[
+                      styles.messageCard,
+                      {
+                        backgroundColor: colors.backgroundSecondary,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.messageLabel, { color: colors.textMuted }]}
+                    >
+                      Points
+                    </Text>
+                    <View style={styles.pointsList}>
+                      {points.map((point, index) => (
+                        <View
+                          key={`${notification._id}-point-${index}`}
+                          style={styles.pointRow}
+                        >
+                          <Text
+                            style={[
+                              styles.pointBullet,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            {`${index + 1}.`}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.pointText,
+                              { color: colors.textSecondary },
+                            ]}
+                          >
+                            {point}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {linkUrl ? (
+                  <View
+                    style={[
+                      styles.messageCard,
+                      {
+                        backgroundColor: colors.backgroundSecondary,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.messageLabel, { color: colors.textMuted }]}
+                    >
+                      Link
+                    </Text>
+                    <Pressable
+                      onPress={() => {
+                        void Linking.openURL(linkUrl);
+                      }}
+                      accessibilityRole="link"
+                      accessibilityLabel="Open notification link"
+                      style={styles.linkRow}
+                    >
+                      <Ionicons
+                        name="open-outline"
+                        size={16}
+                        color={colors.primary}
+                      />
+                      <Text
+                        style={[styles.linkText, { color: colors.primary }]}
+                      >
+                        {notification.link?.trim() || linkUrl}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {attachmentImages.length > 0 ? (
+                  <View style={styles.attachmentsBlock}>
+                    <Text
+                      style={[styles.messageLabel, { color: colors.textMuted }]}
+                    >
+                      Attachments
+                    </Text>
+                    <View style={styles.imagesRow}>
+                      {attachmentImages.map((item, index) => (
+                        <Pressable
+                          key={`${notification._id}-image-${index}`}
+                          onPress={() => setLightboxIndex(index)}
+                          accessibilityRole="imagebutton"
+                          accessibilityLabel={`Open ${item.label}`}
+                        >
+                          <Image
+                            source={{ uri: item.src }}
+                            style={[
+                              styles.imageThumb,
+                              { borderColor: colors.border },
+                            ]}
+                            resizeMode="cover"
+                          />
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {requiresFeedback ? (
+                  <View
+                    style={[
+                      styles.feedbackCard,
+                      {
+                        backgroundColor: colors.backgroundSecondary,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.feedbackHeader}>
+                      <Ionicons
+                        name="create-outline"
+                        size={14}
+                        color={colors.badge.purple.text}
+                      />
+                      <Text
+                        style={[
+                          styles.feedbackTitle,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        Your feedback
+                      </Text>
+                    </View>
+                    <Text
+                      style={[styles.feedbackHint, { color: colors.textMuted }]}
+                    >
+                      Please share what action was taken or any notes for the
+                      team.
+                    </Text>
+                    <TextInput
+                      value={feedback}
+                      onChangeText={setFeedback}
+                      placeholder="Type your response here..."
+                      placeholderTextColor={colors.textMuted}
+                      multiline
+                      textAlignVertical="top"
+                      style={[
+                        styles.feedbackInput,
+                        {
+                          color: colors.textPrimary,
+                          backgroundColor: colors.inputBackground,
+                          borderColor: colors.inputBorder,
+                        },
+                      ]}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.acknowledgeHint,
+                      { backgroundColor: colors.badge.info.bg },
+                    ]}
+                  >
                     <Ionicons
-                      name="create-outline"
-                      size={14}
-                      color={colors.badge.purple.text}
+                      name="information-circle-outline"
+                      size={16}
+                      color={colors.badge.info.text}
                     />
                     <Text
                       style={[
-                        styles.feedbackTitle,
-                        { color: colors.textPrimary },
+                        styles.acknowledgeHintText,
+                        { color: colors.badge.info.text },
                       ]}
                     >
-                      Your feedback
+                      Please review this notification and confirm once you have
+                      read it.
                     </Text>
                   </View>
-                  <Text
-                    style={[styles.feedbackHint, { color: colors.textMuted }]}
-                  >
-                    Please share what action was taken or any notes for the
-                    team.
-                  </Text>
-                  <TextInput
-                    value={feedback}
-                    onChangeText={setFeedback}
-                    placeholder="Type your response here..."
-                    placeholderTextColor={colors.textMuted}
-                    multiline
-                    textAlignVertical="top"
-                    style={[
-                      styles.feedbackInput,
-                      {
-                        color: colors.textPrimary,
-                        backgroundColor: colors.inputBackground,
-                        borderColor: colors.inputBorder,
-                      },
-                    ]}
-                  />
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.acknowledgeHint,
-                    { backgroundColor: colors.badge.info.bg },
-                  ]}
-                >
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={16}
-                    color={colors.badge.info.text}
-                  />
-                  <Text
-                    style={[
-                      styles.acknowledgeHintText,
-                      { color: colors.badge.info.text },
-                    ]}
-                  >
-                    Please review this notification and confirm once you have
-                    read it.
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
+                )}
+              </ScrollView>
 
-            <View
-              style={[
-                styles.footer,
-                {
-                  borderTopColor: colors.border,
-                  backgroundColor: colors.surface,
-                },
-              ]}
-            >
-              {error ? (
-                <View
-                  style={[
-                    styles.errorBanner,
-                    { backgroundColor: colors.badge.error.bg },
-                  ]}
-                >
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={14}
-                    color={colors.badge.error.text}
-                  />
-                  <Text
+              <View
+                style={[
+                  styles.footer,
+                  {
+                    borderTopColor: colors.border,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+              >
+                {error ? (
+                  <View
                     style={[
-                      styles.errorText,
-                      { color: colors.badge.error.text },
+                      styles.errorBanner,
+                      { backgroundColor: colors.badge.error.bg },
                     ]}
                   >
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
+                    <Ionicons
+                      name="alert-circle-outline"
+                      size={14}
+                      color={colors.badge.error.text}
+                    />
+                    <Text
+                      style={[
+                        styles.errorText,
+                        { color: colors.badge.error.text },
+                      ]}
+                    >
+                      {error}
+                    </Text>
+                  </View>
+                ) : null}
 
-              <Button
-                title={
-                  requiresFeedback
-                    ? 'Submit feedback & acknowledge'
-                    : 'Acknowledge notification'
-                }
-                onPress={() =>
-                  void submitRead(requiresFeedback ? feedback : undefined)
-                }
-                loading={submitting}
-                disabled={!canSubmit || submitting}
-                fullWidth
-                icon={
-                  requiresFeedback
-                    ? 'paper-plane-outline'
-                    : 'checkmark-done-outline'
-                }
-              />
+                <Button
+                  title={
+                    requiresFeedback
+                      ? "Submit feedback & acknowledge"
+                      : "Acknowledge notification"
+                  }
+                  onPress={() =>
+                    void submitRead(requiresFeedback ? feedback : undefined)
+                  }
+                  loading={submitting}
+                  disabled={!canSubmit || submitting}
+                  fullWidth
+                  icon={
+                    requiresFeedback
+                      ? "paper-plane-outline"
+                      : "checkmark-done-outline"
+                  }
+                />
+              </View>
             </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {lightboxIndex != null ? (
         <PmImageLightbox
@@ -453,14 +555,14 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   backdrop: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: spacing.lg,
   },
   panel: {
     flexShrink: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
-    overflow: 'hidden',
+    overflow: "hidden",
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.22,
     shadowRadius: 24,
@@ -468,7 +570,7 @@ const styles = StyleSheet.create({
   },
   accentBar: {
     height: 3,
-    width: '100%',
+    width: "100%",
   },
   panelHeader: {
     paddingHorizontal: spacing.md,
@@ -477,16 +579,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   panelHeaderTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing.sm,
   },
   iconWrap: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   panelHeaderText: {
     flex: 1,
@@ -495,24 +597,24 @@ const styles = StyleSheet.create({
   eyebrow: {
     ...typography.caption,
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   badgeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.xs,
   },
   subject: {
     ...typography.label,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: "700",
     lineHeight: 22,
   },
   metaCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
@@ -527,8 +629,8 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   metaText: {
     flex: 1,
@@ -537,7 +639,7 @@ const styles = StyleSheet.create({
   metaName: {
     ...typography.label,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   metaSub: {
     ...typography.caption,
@@ -560,9 +662,9 @@ const styles = StyleSheet.create({
   messageLabel: {
     ...typography.caption,
     fontSize: 10,
-    fontWeight: '700',
+    fontWeight: "700",
     letterSpacing: 0.6,
-    textTransform: 'uppercase',
+    textTransform: "uppercase",
   },
   descriptionBlock: {
     gap: 6,
@@ -576,15 +678,48 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     fontSize: 13,
     lineHeight: 20,
-    fontWeight: '600',
+    fontWeight: "600",
     marginTop: 2,
+  },
+  pointsList: {
+    gap: 6,
+  },
+  pointRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.xs,
+  },
+  pointBullet: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: "700",
+    minWidth: 18,
+  },
+  pointText: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+  },
+  linkRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.xs,
+  },
+  linkText: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+    textDecorationLine: "underline",
   },
   attachmentsBlock: {
     gap: spacing.xs,
   },
   imagesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
   imageThumb: {
@@ -600,14 +735,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   feedbackHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
   },
   feedbackTitle: {
     ...typography.label,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: "700",
   },
   feedbackHint: {
     ...typography.caption,
@@ -624,8 +759,8 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   acknowledgeHint: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     gap: spacing.sm,
     borderRadius: radius.md,
     padding: spacing.sm,
@@ -635,7 +770,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     flex: 1,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   footer: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -645,8 +780,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
@@ -656,6 +791,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 11,
     flex: 1,
-    fontWeight: '600',
+    fontWeight: "600",
   },
 });

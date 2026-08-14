@@ -45,6 +45,11 @@ export function canAccessPreventiveMaintenance(role?: string): boolean {
   return canAccessAttendance(role);
 }
 
+/** Service Inventory sidebar entry — Site Technician only. */
+export function canAccessServiceInventory(role?: string): boolean {
+  return role === "Site Technician";
+}
+
 export function canAccessExpenses(role?: string): boolean {
   return role != null && EXPENSE_ROLES.has(role);
 }

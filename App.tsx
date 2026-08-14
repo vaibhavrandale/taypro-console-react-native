@@ -18,6 +18,7 @@ import { SiteDetailsProvider } from './src/context/SiteDetailsContext';
 import { SearchProvider } from './src/context/SearchContext';
 import { NotificationProvider } from './src/context/NotificationContext';
 import { TimerExecutionNotificationProvider } from './src/context/TimerExecutionNotificationContext';
+import { VoiceCallProvider } from './src/context/VoiceCallContext';
 import { ThemeProvider } from './src/theme';
 import { applyBlinkerFont } from './src/theme/applyBlinkerFont';
 import { AppNavigator } from './src/navigation/AppNavigator';
@@ -61,8 +62,10 @@ export default function App() {
                 <SearchProvider>
                   <NotificationProvider>
                     <TimerExecutionNotificationProvider>
-                      <AppNavigator />
-                      <AppAlertHost />
+                      <VoiceCallProvider>
+                        <AppNavigator />
+                        <AppAlertHost />
+                      </VoiceCallProvider>
                     </TimerExecutionNotificationProvider>
                   </NotificationProvider>
                 </SearchProvider>
