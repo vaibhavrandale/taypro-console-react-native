@@ -68,20 +68,37 @@ export async function ensureMicPermission(): Promise<boolean> {
   return result === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-async function ensureAudioSession(speakerOn: boolean) {
+type InCallManagerModule = typeof import('react-native-incall-manager').default;
+
+let inCallManager: InCallManagerModule | null | undefined;
+
+// WebRTC owns the audio session during a call, so routing goes through
+// InCallManager rather than a generic audio-mode API.
+function loadInCallManager(): InCallManagerModule | null {
+  if (inCallManager !== undefined) return inCallManager;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Audio } = require('expo-av') as typeof import('expo-av');
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
-      playThroughEarpieceAndroid: !speakerOn,
-    });
+    inCallManager = (require('react-native-incall-manager') as {
+      default: InCallManagerModule;
+    }).default;
   } catch {
-    // ignore
+    inCallManager = null;
   }
+  return inCallManager;
+}
+
+function startAudioSession(speakerOn: boolean) {
+  const manager = loadInCallManager();
+  if (!manager) return;
+  manager.start({ media: 'audio' });
+  manager.setForceSpeakerphoneOn(speakerOn);
+}
+
+function stopAudioSession() {
+  const manager = loadInCallManager();
+  if (!manager) return;
+  manager.setForceSpeakerphoneOn(false);
+  manager.stop();
 }
 
 function defaultIceServers(): IceServerConfig[] {
@@ -168,7 +185,7 @@ async function ensurePeer(options: {
     throw new Error('Microphone permission is required for voice calls');
   }
 
-  await ensureAudioSession(options.speakerOn);
+  startAudioSession(options.speakerOn);
 
   const stream = (await mod.mediaDevices.getUserMedia({
     audio: true,
@@ -308,7 +325,7 @@ export function setMuted(muted: boolean) {
 }
 
 export async function setSpeakerOn(on: boolean) {
-  await ensureAudioSession(on);
+  loadInCallManager()?.setForceSpeakerphoneOn(on);
 }
 
 export function subscribeAudioLevels(
@@ -338,6 +355,7 @@ export function leaveVoiceChannel() {
   } catch {
     // ignore
   }
+  stopAudioSession();
   stopLevelLoop();
   localStream = null;
   remoteStream = null;
