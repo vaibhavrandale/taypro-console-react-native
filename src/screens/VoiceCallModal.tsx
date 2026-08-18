@@ -201,12 +201,12 @@ export function VoiceCallModal() {
               ]}
             >
               <Ionicons
-                name={speakerOn ? 'volume-high' : 'volume-mute'}
+                name={speakerOn ? 'volume-high' : 'ear-outline'}
                 size={22}
                 color={speakerOn ? colors.badge.info.text : colors.textPrimary}
               />
               <Text style={[styles.btnLabel, { color: colors.textMuted }]}>
-                Speaker
+                {speakerOn ? 'Speaker' : 'Earpiece'}
               </Text>
             </Pressable>
           </View>

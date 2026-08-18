@@ -13,15 +13,16 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { Navbar, Screen } from '../components/layout';
-import { fetchCallContacts } from '../api/voiceCalls';
+import { fetchCallContacts, fetchVoiceCallHistory } from '../api/voiceCalls';
 import { API_BASE_URL } from '../config/api';
 import { useAuth } from '../context/AuthContext';
 import { useVoiceCall } from '../context/VoiceCallContext';
+import { getSocket } from '../lib/socket';
 import { isWebRtcNativeAvailable } from '../services/webrtcVoice';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
-import type { VoiceCallContact } from '../types/voiceCall';
+import type { VoiceCall, VoiceCallContact } from '../types/voiceCall';
 
 function getServerRoot() {
   return API_BASE_URL.replace(/\/api\/v1\/?$/, '');
@@ -33,6 +34,19 @@ function getProfileImageUri(path?: string) {
   return `${getServerRoot()}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function formatWhen(value?: string | null) {
+  return value ? new Date(value).toLocaleString() : '—';
+}
+
+function formatDuration(startedAt?: string | null, endedAt?: string | null) {
+  if (!startedAt || !endedAt) return '—';
+  const seconds = Math.max(
+    0,
+    Math.floor((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000),
+  );
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 export function UsersScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -41,9 +55,14 @@ export function UsersScreen() {
     () => Constants.executionEnvironment !== 'storeClient',
   );
   const [contacts, setContacts] = useState<VoiceCallContact[]>([]);
+  const [history, setHistory] = useState<VoiceCall[]>([]);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<'users' | 'history'>('users');
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [callingId, setCallingId] = useState<string | null>(null);
 
@@ -62,9 +81,74 @@ export function UsersScreen() {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      setHistory(await fetchVoiceCallHistory());
+    } catch (err) {
+      setHistoryError(
+        err instanceof Error ? err.message : 'Failed to load call history',
+      );
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (phase === 'idle') void loadHistory();
+  }, [loadHistory, phase]);
+
+  useEffect(() => {
+    if (!user?._id) return;
+    let cancelled = false;
+    let socket: Awaited<ReturnType<typeof getSocket>> | null = null;
+
+    const onOnlineUsers = (rows: unknown) => {
+      if (!Array.isArray(rows)) return;
+      setOnlineUserIds(
+        new Set(
+          rows
+            .filter(
+              (row): row is { id: unknown; socketIds: unknown[] } =>
+                typeof row === 'object' &&
+                row !== null &&
+                'id' in row &&
+                'socketIds' in row &&
+                Array.isArray(row.socketIds) &&
+                row.socketIds.length > 0,
+            )
+            .map((row) => String(row.id)),
+        ),
+      );
+    };
+    const joinPresence = () => {
+      socket?.emit('join', {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        profile_image: user.profile_image,
+      });
+    };
+
+    void getSocket().then((instance) => {
+      if (cancelled) return;
+      socket = instance;
+      socket.on('updateOnlineUsers', onOnlineUsers);
+      socket.on('connect', joinPresence);
+      if (socket.connected) joinPresence();
+    });
+
+    return () => {
+      cancelled = true;
+      socket?.off('updateOnlineUsers', onOnlineUsers);
+      socket?.off('connect', joinPresence);
+    };
+  }, [user]);
 
   useEffect(() => {
     // Defer native probe so Expo Go / old clients don't crash on first paint.
@@ -102,7 +186,10 @@ export function UsersScreen() {
 
   return (
     <Screen>
-      <Navbar title="Users" subtitle="Tap call to start a voice call" />
+      <Navbar
+        title="Users"
+        subtitle="Call works even if they are offline but have the app"
+      />
       {!webrtcReady ? (
         <View
           style={[
@@ -117,23 +204,47 @@ export function UsersScreen() {
           </Text>
         </View>
       ) : null}
-      <View
-        style={[
-          styles.searchWrap,
-          { borderColor: colors.border, backgroundColor: colors.surface },
-        ]}
-      >
-        <Ionicons name="search" size={16} color={colors.textMuted} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search users"
-          placeholderTextColor={colors.textMuted}
-          style={[styles.searchInput, { color: colors.textPrimary }]}
-        />
+      <View style={[styles.tabs, { backgroundColor: colors.backgroundTertiary }]}>
+        {(['users', 'history'] as const).map((tab) => (
+          <Pressable
+            key={tab}
+            onPress={() => setView(tab)}
+            style={[
+              styles.tab,
+              view === tab && { backgroundColor: colors.surface },
+            ]}
+          >
+            <Text
+              style={{
+                color: view === tab ? colors.textPrimary : colors.textMuted,
+                fontWeight: '600',
+              }}
+            >
+              {tab === 'users' ? 'Users' : 'Call history'}
+            </Text>
+          </Pressable>
+        ))}
       </View>
+      {view === 'users' ? (
+        <View
+          style={[
+            styles.searchWrap,
+            { borderColor: colors.border, backgroundColor: colors.surface },
+          ]}
+        >
+          <Ionicons name="search" size={16} color={colors.textMuted} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search users"
+            placeholderTextColor={colors.textMuted}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
+          />
+        </View>
+      ) : null}
 
-      {loading ? (
+      {view === 'users' ? (
+        loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
         </View>
@@ -164,6 +275,7 @@ export function UsersScreen() {
           renderItem={({ item }) => {
             const imageUri = getProfileImageUri(item.profile_image);
             const busy = callingId === item._id;
+            const online = onlineUserIds.has(item._id);
             return (
               <View
                 style={[
@@ -198,9 +310,17 @@ export function UsersScreen() {
                     {item.username}
                   </Text>
                   <Text
-                    style={[styles.role, { color: colors.textMuted }]}
+                    style={[
+                      styles.role,
+                      {
+                        color: online
+                          ? colors.badge.success.text
+                          : colors.textMuted,
+                      },
+                    ]}
                     numberOfLines={1}
                   >
+                    {online ? 'Online' : 'Offline'} ·{' '}
                     {item.role || item.designation || item.email || '—'}
                   </Text>
                 </View>
@@ -212,7 +332,9 @@ export function UsersScreen() {
                     {
                       backgroundColor: colors.primary,
                       opacity:
-                        !webrtcReady || phase !== 'idle' || submitting ? 0.5 : 1,
+                        !webrtcReady || phase !== 'idle' || submitting
+                          ? 0.35
+                          : 1,
                     },
                   ]}
                   accessibilityLabel={`Call ${item.username}`}
@@ -227,12 +349,99 @@ export function UsersScreen() {
             );
           }}
         />
+        )
+      ) : historyLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : historyError ? (
+        <View style={styles.center}>
+          <Text style={{ color: colors.danger }}>{historyError}</Text>
+          <Pressable
+            onPress={() => void loadHistory()}
+            style={{ marginTop: spacing.sm }}
+          >
+            <Text style={{ color: colors.primary }}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={history}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={historyLoading}
+              onRefresh={() => void loadHistory()}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <Text style={[styles.empty, { color: colors.textMuted }]}>
+              No past calls yet
+            </Text>
+          }
+          renderItem={({ item }) => {
+            const outgoing = String(item.caller_id) === String(user?._id);
+            const peer = outgoing ? item.callee_snapshot : item.caller_snapshot;
+            return (
+              <View
+                style={[
+                  styles.historyRow,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.meta}>
+                  <Text style={[styles.name, { color: colors.textPrimary }]}>
+                    {outgoing ? '↗ Outgoing' : '↙ Incoming'} ·{' '}
+                    {peer?.username || 'User'}
+                  </Text>
+                  <Text style={[styles.role, { color: colors.textMuted }]}>
+                    {formatWhen(item.started_at || item.createdAt)} ·{' '}
+                    {formatDuration(item.started_at, item.ended_at)}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.historyStatus,
+                    {
+                      color:
+                        item.status === 'ended'
+                          ? colors.badge.success.text
+                          : item.status === 'rejected'
+                            ? colors.danger
+                            : colors.textMuted,
+                    },
+                  ]}
+                >
+                  {item.status}
+                </Text>
+              </View>
+            );
+          }}
+        />
       )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  tabs: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    padding: 3,
+    borderRadius: radius.md,
+  },
+  tab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+  },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -273,6 +482,19 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     padding: spacing.sm,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  historyStatus: {
+    ...typography.caption,
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
   avatar: {
     width: 40,

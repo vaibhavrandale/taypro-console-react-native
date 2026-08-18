@@ -1,4 +1,4 @@
-import { PermissionsAndroid, Platform } from 'react-native';
+import { NativeModules, PermissionsAndroid, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import type { IceServerConfig } from '../types/voiceCall';
 
@@ -77,6 +77,12 @@ let inCallManager: InCallManagerModule | null | undefined;
 function loadInCallManager(): InCallManagerModule | null {
   if (inCallManager !== undefined) return inCallManager;
   try {
+    // The JS package resolves even when the native side is missing from an
+    // older build, and every method then throws on a null native module.
+    if (!NativeModules.InCallManager) {
+      inCallManager = null;
+      return inCallManager;
+    }
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     inCallManager = (require('react-native-incall-manager') as {
       default: InCallManagerModule;

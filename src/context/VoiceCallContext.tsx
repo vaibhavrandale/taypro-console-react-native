@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Vibration } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import {
   acceptVoiceCall,
@@ -29,6 +29,12 @@ import {
   startAsCaller,
   subscribeAudioLevels,
 } from '../services/webrtcVoice';
+import {
+  addCallNotificationResponseListener,
+  consumeLaunchCallId,
+  registerForCallPushAsync,
+  unregisterCallPushAsync,
+} from '../services/pushNotifications';
 import type { CallSignalPayload, VoiceCall } from '../types/voiceCall';
 
 type VoiceCallPhase =
@@ -125,6 +131,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   );
 
   const resetLocal = useCallback(() => {
+    Vibration.cancel();
     leaveVoiceChannel();
     setMutedState(false);
     setSpeakerState(true);
@@ -137,6 +144,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   const finishCall = useCallback(
     (next: VoiceCall) => {
+      Vibration.cancel();
       leaveVoiceChannel();
       setCall(next);
       setPhase('ended');
@@ -185,11 +193,31 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     [resetLocal, user?._id],
   );
 
+  // Tapping a call push while the socket was asleep means we likely missed the
+  // live call:incoming event, so pull the call and show it if still ringing.
+  const resumeIncomingCall = useCallback(
+    async (callId: string) => {
+      if (phaseRef.current !== 'idle') return;
+      try {
+        const fresh = await fetchVoiceCall(callId);
+        if (fresh.status !== 'ringing') return;
+        if (String(fresh.callee_id) !== String(userIdRef.current || '')) return;
+        setCall(fresh);
+        setPhase('incoming');
+        setError(null);
+      } catch {
+        // call likely already ended/missed; ignore
+      }
+    },
+    [],
+  );
+
   const accept = useCallback(async () => {
     const current = callRef.current;
     if (!current) return;
     setSubmitting(true);
     setError(null);
+    Vibration.cancel();
     try {
       setPhase('connecting');
       const updated = await acceptVoiceCall(current._id);
@@ -269,6 +297,9 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setCall(payload);
       setPhase('incoming');
       setError(null);
+      if (AppState.currentState === 'active') {
+        Vibration.vibrate([0, 800, 700], true);
+      }
     };
 
     const onAccepted = async (payload: VoiceCall) => {
@@ -366,6 +397,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      Vibration.cancel();
       if (socketInstance) {
         socketInstance.off('call:incoming', onIncoming);
         socketInstance.off('call:accepted', onAccepted);
@@ -390,6 +422,10 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      if (phaseRef.current === 'incoming') {
+        if (state === 'active') Vibration.vibrate([0, 800, 700], true);
+        else Vibration.cancel();
+      }
       if (state === 'active' && callRef.current?._id) {
         void fetchVoiceCall(callRef.current._id)
           .then((fresh) => {
@@ -410,6 +446,18 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       destroyVoiceEngine();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?._id) return;
+    void registerForCallPushAsync();
+    void consumeLaunchCallId().then((callId) => {
+      if (callId) void resumeIncomingCall(callId);
+    });
+    const unsubscribe = addCallNotificationResponseListener((callId) => {
+      void resumeIncomingCall(callId);
+    });
+    return unsubscribe;
+  }, [isAuthenticated, resumeIncomingCall, user?._id]);
 
   useEffect(() => {
     if (phase === 'idle' || phase === 'ended' || phase === 'incoming') {

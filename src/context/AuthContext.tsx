@@ -18,6 +18,7 @@ import {
   clearAllSessionData,
 } from "../utils/sessionStorage";
 import { setSessionExpiredHandler } from "../utils/sessionExpiry";
+import { unregisterCallPushAsync } from "../services/pushNotifications";
 
 type AuthContextValue = {
   user: User | null;
@@ -180,6 +181,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Drop this device's push token first, while the auth token still works,
+    // so future calls to this user don't ring whoever logs in next.
+    await unregisterCallPushAsync().catch(() => undefined);
+
     try {
       await apiFetch("/auth/sign-out", {
         method: "POST",

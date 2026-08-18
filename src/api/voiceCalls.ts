@@ -63,6 +63,16 @@ export async function fetchVoiceCall(callId: string): Promise<VoiceCall> {
   return callAction(`/calls/${callId}`, { method: 'GET' }, 'Failed to load call');
 }
 
+export async function fetchVoiceCallHistory(limit = 50): Promise<VoiceCall[]> {
+  const response = await apiFetch(`/calls?limit=${limit}`);
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throw new Error(extractError(payload, 'Failed to load call history'));
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.data)) return [];
+  return payload.data.map(asCall);
+}
+
 export async function acceptVoiceCall(callId: string): Promise<VoiceCall> {
   return callAction(
     `/calls/${callId}/accept`,
@@ -85,6 +95,30 @@ export async function endVoiceCall(callId: string): Promise<VoiceCall> {
     { method: 'POST', body: '{}' },
     'Failed to end call',
   );
+}
+
+export async function registerPushToken(token: string): Promise<void> {
+  const response = await apiFetch('/calls/push-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) {
+    const payload = await parseJson(response);
+    throw new Error(extractError(payload, 'Failed to register push token'));
+  }
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  const response = await apiFetch('/calls/push-token', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+  if (!response.ok) {
+    const payload = await parseJson(response);
+    throw new Error(extractError(payload, 'Failed to remove push token'));
+  }
 }
 
 export async function fetchCallContacts(): Promise<VoiceCallContact[]> {
