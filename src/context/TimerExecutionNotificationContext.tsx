@@ -14,6 +14,14 @@ import {
 } from '../api/timerExecutionNotifications';
 import { useAuth } from './AuthContext';
 import type { TimerExecutionNotification } from '../types/timerExecutionNotification';
+import {
+  addAlertNotificationResponseListener,
+  consumeLaunchAlertType,
+  dismissAlertNotification,
+  ensureAlertNotificationsReady,
+  presentAlertNotification,
+  TIMER_ALERT_IDENTIFIER,
+} from '../services/pushNotifications';
 
 type TimerExecutionNotificationContextValue = {
   notifications: TimerExecutionNotification[];
@@ -21,6 +29,7 @@ type TimerExecutionNotificationContextValue = {
   submitting: boolean;
   error: string;
   visible: boolean;
+  openModal: () => void;
   closeModal: () => void;
   refresh: (autoOpen?: boolean, silent?: boolean) => Promise<void>;
   markAllRead: () => Promise<void>;
@@ -30,6 +39,17 @@ const TimerExecutionNotificationContext =
   createContext<TimerExecutionNotificationContextValue | null>(null);
 
 const POLL_INTERVAL_MS = 30 * 1000;
+
+function postTimerSystemAlert(items: TimerExecutionNotification[]) {
+  if (items.length === 0) return;
+  const blocks = items.reduce((sum, item) => sum + (item.block?.length ?? 0), 0);
+  void presentAlertNotification({
+    identifier: TIMER_ALERT_IDENTIFIER,
+    title: 'Timer execution',
+    body: `${items.length} site${items.length === 1 ? '' : 's'} · ${blocks} block${blocks === 1 ? '' : 's'} waiting for acknowledgement`,
+    data: { type: 'timer_execution' },
+  });
+}
 
 export function TimerExecutionNotificationProvider({
   children,
@@ -45,6 +65,7 @@ export function TimerExecutionNotificationProvider({
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
   const signatureRef = useRef<string>('');
+  const notificationsRef = useRef<TimerExecutionNotification[]>([]);
   const loadRef = useRef<(autoOpen: boolean, silent?: boolean) => Promise<void>>(
     async () => {},
   );
@@ -70,14 +91,20 @@ export function TimerExecutionNotificationProvider({
           .sort()
           .join('|');
         const isNew = signature.length > 0 && signature !== signatureRef.current;
+        const appActive = AppState.currentState === 'active';
 
         signatureRef.current = signature;
+        notificationsRef.current = data;
         setNotifications(data);
 
         if (data.length === 0) {
+          void dismissAlertNotification(TIMER_ALERT_IDENTIFIER);
           setVisible(false);
-        } else if (autoOpen && (isNew || !silent)) {
-          setVisible(true);
+        } else {
+          if (isNew) postTimerSystemAlert(data);
+          if (autoOpen && appActive && (isNew || !silent)) {
+            setVisible(true);
+          }
         }
       } catch (err) {
         setNotifications([]);
@@ -110,13 +137,16 @@ export function TimerExecutionNotificationProvider({
     if (authLoading) return;
 
     if (!isAuthenticated || !user?._id) {
+      void dismissAlertNotification(TIMER_ALERT_IDENTIFIER);
       setNotifications([]);
+      notificationsRef.current = [];
       setVisible(false);
       setError('');
       signatureRef.current = '';
       return;
     }
 
+    void ensureAlertNotificationsReady();
     void load(true);
   }, [authLoading, isAuthenticated, user?._id, load]);
 
@@ -124,9 +154,8 @@ export function TimerExecutionNotificationProvider({
     if (authLoading || !isAuthenticated) return;
 
     const poll = () => {
-      if (AppState.currentState === 'active') {
-        void loadRef.current(true, true);
-      }
+      const active = AppState.currentState === 'active';
+      void loadRef.current(active, true);
     };
 
     const intervalId = setInterval(poll, POLL_INTERVAL_MS);
@@ -134,7 +163,9 @@ export function TimerExecutionNotificationProvider({
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         void loadRef.current(true, true);
+        return;
       }
+      postTimerSystemAlert(notificationsRef.current);
     });
 
     return () => {
@@ -142,6 +173,32 @@ export function TimerExecutionNotificationProvider({
       appStateSub.remove();
     };
   }, [authLoading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    void consumeLaunchAlertType('timer_execution').then((type) => {
+      if (type === 'timer_execution') {
+        setVisible(true);
+        void loadRef.current(false, true);
+      }
+    });
+
+    const unsubscribe = addAlertNotificationResponseListener((type) => {
+      if (type !== 'timer_execution') return;
+      setVisible(true);
+      void loadRef.current(false, true);
+    });
+    return unsubscribe;
+  }, [isAuthenticated]);
+
+  const openModal = useCallback(() => {
+    if (notifications.length > 0) {
+      setVisible(true);
+      return;
+    }
+    void load(true);
+  }, [notifications.length, load]);
 
   const closeModal = useCallback(() => {
     // Must mark as read — keep open (matches web backdrop="static").
@@ -156,8 +213,10 @@ export function TimerExecutionNotificationProvider({
     try {
       await markAllTimerNotificationsRead(notifications.map((item) => item._id));
       signatureRef.current = '';
+      notificationsRef.current = [];
       setNotifications([]);
       setVisible(false);
+      void dismissAlertNotification(TIMER_ALERT_IDENTIFIER);
     } catch (err) {
       setError(
         err instanceof Error
@@ -176,6 +235,7 @@ export function TimerExecutionNotificationProvider({
       submitting,
       error,
       visible,
+      openModal,
       closeModal,
       refresh,
       markAllRead,
@@ -186,6 +246,7 @@ export function TimerExecutionNotificationProvider({
       submitting,
       error,
       visible,
+      openModal,
       closeModal,
       refresh,
       markAllRead,

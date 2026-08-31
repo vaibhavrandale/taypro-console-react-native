@@ -61,5 +61,7 @@ export type DrawerParamList = {
   ServiceInventory: undefined;
   PreventiveMaintenance: NavigatorScreenParams<PreventiveMaintenanceStackParamList> | undefined;
   ExpenseClaims: NavigatorScreenParams<ExpenseClaimsStackParamList> | undefined;
+  Notifications: undefined;
   Settings: undefined;
+  Dummy: undefined;
 };

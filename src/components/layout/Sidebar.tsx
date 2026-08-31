@@ -15,7 +15,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { API_BASE_URL } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
+import { useNotification } from "../../context/NotificationContext";
+import { useTimerExecutionNotification } from "../../context/TimerExecutionNotificationContext";
 import { useTheme } from "../../theme";
+import { Badge } from "../ui";
 import { radius, spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import {
@@ -47,6 +50,11 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         label: "Dashboard",
         icon: "grid-outline",
         nestedScreen: "Dashboard",
+      },
+      {
+        name: "Notifications",
+        label: "Notifications",
+        icon: "notifications-outline",
       },
       {
         name: "Robots",
@@ -98,6 +106,7 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         icon: "cube-outline",
       },
       { name: "Settings", label: "Settings", icon: "settings-outline" },
+      { name: "Dummy", label: "Dummy", icon: "color-palette-outline" },
     ],
   },
 ];
@@ -212,9 +221,10 @@ type MenuItemProps = {
   item: DrawerRoute;
   focused: boolean;
   onPress: () => void;
+  badgeCount?: number;
 };
 
-function MenuItem({ item, focused, onPress }: MenuItemProps) {
+function MenuItem({ item, focused, onPress, badgeCount }: MenuItemProps) {
   const { colors } = useTheme();
 
   return (
@@ -240,6 +250,13 @@ function MenuItem({ item, focused, onPress }: MenuItemProps) {
       >
         {item.label}
       </Text>
+      {badgeCount && badgeCount > 0 ? (
+        <Badge
+          label={badgeCount > 9 ? "9+" : String(badgeCount)}
+          variant="error"
+          size="sm"
+        />
+      ) : null}
     </Pressable>
   );
 }
@@ -248,8 +265,11 @@ export function Sidebar(props: DrawerContentComponentProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
+  const { unreadCount } = useNotification();
+  const { notifications: timerNotifications } = useTimerExecutionNotification();
   const [search, setSearch] = useState("");
   const active = getActiveRoute(props.state);
+  const notificationBadge = unreadCount + timerNotifications.length;
   const menuSections = useMemo(
     () => buildMenuSections(user?.role),
     [user?.role],
@@ -346,6 +366,11 @@ export function Sidebar(props: DrawerContentComponentProps) {
                   item={item}
                   focused={isItemFocused(item, active)}
                   onPress={() => navigateTo(item)}
+                  badgeCount={
+                    item.name === "Notifications"
+                      ? notificationBadge
+                      : undefined
+                  }
                 />
               ))}
             </View>

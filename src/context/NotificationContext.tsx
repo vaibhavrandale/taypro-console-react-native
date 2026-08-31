@@ -14,6 +14,14 @@ import {
 } from '../api/customNotifications';
 import { useAuth } from './AuthContext';
 import type { CustomNotification } from '../types/customNotification';
+import {
+  addAlertNotificationResponseListener,
+  consumeLaunchAlertType,
+  customAlertIdentifier,
+  dismissAlertNotification,
+  ensureAlertNotificationsReady,
+  presentAlertNotification,
+} from '../services/pushNotifications';
 
 type NotificationContextValue = {
   notification: CustomNotification | null;
@@ -34,6 +42,20 @@ const NotificationContext = createContext<NotificationContextValue | null>(
 
 const NOTIFICATION_POLL_INTERVAL_MS = 30 * 1000;
 
+function clip(text: string, max = 140) {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+function postSystemAlert(notification: CustomNotification) {
+  void presentAlertNotification({
+    identifier: customAlertIdentifier(notification._id),
+    title: notification.subject || 'Nectyr',
+    body: clip(notification.description || 'You have a new notification'),
+    data: { type: 'custom_notification', notificationId: notification._id },
+  });
+}
+
 export function NotificationProvider({
   children,
 }: {
@@ -48,6 +70,7 @@ export function NotificationProvider({
   const [error, setError] = useState('');
   const [visible, setVisible] = useState(false);
   const lastKnownIdRef = useRef<string | null>(null);
+  const notificationRef = useRef<CustomNotification | null>(null);
   const loadLatestRef = useRef<
     (autoOpen: boolean, silent?: boolean) => Promise<void>
   >(async () => {});
@@ -69,16 +92,26 @@ export function NotificationProvider({
       const latest = await fetchLatestUnreadNotification();
       const isNewAlert =
         latest != null && latest._id !== lastKnownIdRef.current;
+      const appActive = AppState.currentState === 'active';
 
       if (latest) {
         lastKnownIdRef.current = latest._id;
       } else {
+        if (lastKnownIdRef.current) {
+          void dismissAlertNotification(
+            customAlertIdentifier(lastKnownIdRef.current),
+          );
+        }
         lastKnownIdRef.current = null;
       }
 
+      notificationRef.current = latest;
       setNotification(latest);
-      if (autoOpen && latest && isNewAlert) {
-        setVisible(true);
+      if (latest && isNewAlert) {
+        postSystemAlert(latest);
+        if (autoOpen && appActive) {
+          setVisible(true);
+        }
       }
       if (!latest) {
         setVisible(false);
@@ -110,13 +143,20 @@ export function NotificationProvider({
     if (authLoading) return;
 
     if (!isAuthenticated) {
+      if (lastKnownIdRef.current) {
+        void dismissAlertNotification(
+          customAlertIdentifier(lastKnownIdRef.current),
+        );
+      }
       setNotification(null);
+      notificationRef.current = null;
       setVisible(false);
       setError('');
       lastKnownIdRef.current = null;
       return;
     }
 
+    void ensureAlertNotificationsReady();
     void loadLatest(true);
   }, [authLoading, isAuthenticated, loadLatest]);
 
@@ -124,9 +164,8 @@ export function NotificationProvider({
     if (authLoading || !isAuthenticated) return;
 
     const poll = () => {
-      if (AppState.currentState === 'active') {
-        void loadLatestRef.current(true, true);
-      }
+      const active = AppState.currentState === 'active';
+      void loadLatestRef.current(active, true);
     };
 
     const intervalId = setInterval(poll, NOTIFICATION_POLL_INTERVAL_MS);
@@ -134,7 +173,10 @@ export function NotificationProvider({
     const appStateSub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
         void loadLatestRef.current(true, true);
+        return;
       }
+      const current = notificationRef.current;
+      if (current) postSystemAlert(current);
     });
 
     return () => {
@@ -142,6 +184,24 @@ export function NotificationProvider({
       appStateSub.remove();
     };
   }, [authLoading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    void consumeLaunchAlertType('custom_notification').then((type) => {
+      if (type === 'custom_notification') {
+        setVisible(true);
+        void loadLatestRef.current(false, true);
+      }
+    });
+
+    const unsubscribe = addAlertNotificationResponseListener((type) => {
+      if (type !== 'custom_notification') return;
+      setVisible(true);
+      void loadLatestRef.current(false, true);
+    });
+    return unsubscribe;
+  }, [isAuthenticated]);
 
   const openNotification = useCallback(() => {
     if (notification) {
@@ -163,7 +223,9 @@ export function NotificationProvider({
       setError('');
 
       try {
-        await markNotificationRead(notification._id, feedback);
+        const id = notification._id;
+        await markNotificationRead(id, feedback);
+        void dismissAlertNotification(customAlertIdentifier(id));
         await loadLatest(true);
       } catch (err) {
         setError(

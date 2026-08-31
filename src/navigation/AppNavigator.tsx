@@ -35,6 +35,8 @@ import { ServiceInventoryScreen } from '../screens/ServiceInventoryScreen';
 import { GlobalSearchModal } from '../components/search/GlobalSearchModal';
 import { CustomNotificationModal } from '../components/notifications/CustomNotificationModal';
 import { TimerExecutionNotificationModal } from '../components/notifications/TimerExecutionNotificationModal';
+import { DummyScreen } from '../screens/DummyScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 
 const AuthStack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -109,6 +111,11 @@ function MainDrawer() {
         component={PreventiveMaintenanceStack}
       />
       <Drawer.Screen name="ExpenseClaims" component={ExpenseClaimsStack} />
+      <Drawer.Screen
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{ title: 'Notifications' }}
+      />
       <Drawer.Screen name="Settings">
         {() => (
           <PlaceholderScreen
@@ -118,6 +125,11 @@ function MainDrawer() {
           />
         )}
       </Drawer.Screen>
+      <Drawer.Screen
+        name="Dummy"
+        component={DummyScreen}
+        options={{ title: 'Dummy' }}
+      />
     </Drawer.Navigator>
       <GlobalSearchModal />
       <CustomNotificationModal />
