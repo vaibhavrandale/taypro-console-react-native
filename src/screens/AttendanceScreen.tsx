@@ -1,13 +1,17 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appAlert } from '../utils/appAlert';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -17,11 +21,16 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { Navbar, Screen } from "../components/layout";
 import { PunchCaptureModal } from "../components/attendance/PunchCaptureModal";
-import { LocationSyncStatusCard } from "../components/attendance/LocationSyncStatusCard";
+// import { LocationSyncStatusCard } from "../components/attendance/LocationSyncStatusCard";
 import { buildAttendanceMapHtml } from "../components/attendance/attendanceMapHtml";
 import { MapLocateButton } from "../components/map/MapLocateButton";
 import { Badge, Button } from "../components/ui";
-import { fetchPunchStatus, punchIn, punchOut } from "../api/attendance";
+import {
+  fetchPunchStatus,
+  punchIn,
+  punchOut,
+  requestWfh,
+} from "../api/attendance";
 import {
   fetchSiteCoordinates,
   parseSiteCoordinateNumbers,
@@ -93,6 +102,39 @@ export function AttendanceScreen() {
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [focusUser, setFocusUser] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [wfhChecked, setWfhChecked] = useState(false);
+  const [wfhReason, setWfhReason] = useState("");
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollWfhFieldIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 80);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!wfhChecked) {
+      setKeyboardInset(0);
+      return;
+    }
+    scrollWfhFieldIntoView();
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) => {
+      setKeyboardInset(e.endCoordinates.height);
+      scrollWfhFieldIntoView();
+    });
+    const hide = Keyboard.addListener(hideEvent, () => setKeyboardInset(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [wfhChecked, scrollWfhFieldIntoView]);
 
   const siteNumbers = useMemo(
     () => (siteCoords ? parseSiteCoordinateNumbers(siteCoords) : null),
@@ -127,6 +169,14 @@ export function AttendanceScreen() {
   const punchCompleteToday = Boolean(
     punchStatus?.punchedIn && punchStatus?.punchedOut,
   );
+
+  const wfhPending = Boolean(
+    punchStatus?.wfh?.status === "pending" && !punchStatus?.punchedIn,
+  );
+
+  const isWfhAttendance =
+    punchStatus?.data?.source === "wfh" ||
+    punchStatus?.wfh?.status === "approved";
 
   const punchInTime = punchStatus?.data?.punchin_time;
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -247,7 +297,12 @@ export function AttendanceScreen() {
 
   const loadPunchStatus = useCallback(async () => {
     if (!userId) {
-      setPunchStatus({ punchedIn: false, punchedOut: false, data: null });
+      setPunchStatus({
+        punchedIn: false,
+        punchedOut: false,
+        data: null,
+        wfh: null,
+      });
       return;
     }
 
@@ -288,6 +343,8 @@ export function AttendanceScreen() {
     setLocationTip("");
     setUserLocation(null);
     setPunchMode(null);
+    setWfhChecked(false);
+    setWfhReason("");
   }, [userId]);
 
   useEffect(() => {
@@ -385,6 +442,40 @@ export function AttendanceScreen() {
     [userLocation, punchMode, selectedSiteId, loadPunchStatus, refreshTrackingState],
   );
 
+  const handleRequestWfh = useCallback(async () => {
+    if (!selectedSiteId) {
+      appAlert("Site required", "Please select a site.");
+      return;
+    }
+    const reason = wfhReason.trim();
+    if (!reason) {
+      appAlert(
+        "Reason required",
+        "Please enter a WFH reason (e.g. rain / no robot ops).",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const message = await requestWfh({
+        siteId: selectedSiteId,
+        reason,
+      });
+      appAlert("WFH request", message);
+      setWfhChecked(false);
+      setWfhReason("");
+      await loadPunchStatus();
+    } catch (err) {
+      appAlert(
+        "WFH request failed",
+        err instanceof Error ? err.message : "Could not submit WFH request",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }, [selectedSiteId, wfhReason, loadPunchStatus]);
+
   const selectedSite = assignedSites.find((s) => s.site_id === selectedSiteId);
 
   return (
@@ -393,6 +484,7 @@ export function AttendanceScreen() {
 
       <Screen
         scroll
+        scrollRef={scrollRef}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -639,7 +731,11 @@ export function AttendanceScreen() {
                 </Text>
               ) : null}
 
-              <LocationSyncStatusCard visible />
+              {isWfhAttendance ? (
+                <Badge label="WFH" variant="success" size="sm" />
+              ) : null}
+
+              {/* <LocationSyncStatusCard visible /> */}
 
               {punchInLocation?.lat != null &&
               punchInLocation?.lng != null &&
@@ -787,9 +883,45 @@ export function AttendanceScreen() {
                 {punchCompleteToday ? (
                   <View style={styles.completedBadge}>
                     <Badge
-                      label="You have already punched in and out for today."
+                      label={
+                        isWfhAttendance
+                          ? "WFH approved — attendance marked for today."
+                          : "You have already punched in and out for today."
+                      }
                       variant="success"
                     />
+                  </View>
+                ) : wfhPending ? (
+                  <View
+                    style={[
+                      styles.wfhPendingBox,
+                      {
+                        backgroundColor: colors.badge.warning.bg,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.wfhPendingTitle,
+                        { color: colors.badge.warning.text },
+                      ]}
+                    >
+                      WFH request pending approval
+                      {punchStatus?.wfh?.reason
+                        ? ` (${punchStatus.wfh.reason})`
+                        : ""}
+                      .
+                    </Text>
+                    <Text
+                      style={[
+                        styles.wfhPendingHint,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      Service Admin / Service User will approve — attendance
+                      will mark automatically.
+                    </Text>
                   </View>
                 ) : showPunchOut ? (
                   punchOutGate.unlocked ? (
@@ -841,20 +973,93 @@ export function AttendanceScreen() {
                     </View>
                   )
                 ) : (
-                  <Button
-                    title="Punch In"
-                    icon="log-in-outline"
-                    onPress={() => setPunchMode("in")}
-                    disabled={
-                      !isInside || !userLocation || submitting || loading
-                    }
-                    loading={submitting}
-                    fullWidth
-                  />
+                  <>
+                    <Pressable
+                      onPress={() => setWfhChecked((v) => !v)}
+                      style={styles.wfhCheckRow}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: wfhChecked }}
+                    >
+                      <Ionicons
+                        name={wfhChecked ? "checkbox" : "square-outline"}
+                        size={22}
+                        color={wfhChecked ? colors.primary : colors.textMuted}
+                      />
+                      <View style={styles.wfhCheckCopy}>
+                        <Text
+                          style={[
+                            styles.wfhCheckLabel,
+                            { color: colors.textPrimary },
+                          ]}
+                        >
+                          WFH
+                        </Text>
+                        <Text
+                          style={[
+                            styles.wfhCheckHint,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          Rain / no site ops — skips radius, needs approval
+                        </Text>
+                      </View>
+                    </Pressable>
+
+                    {wfhChecked ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.wfhReasonLabel,
+                            { color: colors.textSecondary },
+                          ]}
+                        >
+                          WFH reason
+                        </Text>
+                        <TextInput
+                          value={wfhReason}
+                          onChangeText={setWfhReason}
+                          placeholder="e.g. Rainy season — robots not operating"
+                          placeholderTextColor={colors.textMuted}
+                          multiline
+                          maxLength={500}
+                          onFocus={scrollWfhFieldIntoView}
+                          style={[
+                            styles.wfhReasonInput,
+                            {
+                              color: colors.textPrimary,
+                              backgroundColor: colors.backgroundTertiary,
+                              borderColor: colors.border,
+                            },
+                          ]}
+                        />
+                        <Button
+                          title="Request WFH"
+                          icon="home-outline"
+                          onPress={() => void handleRequestWfh()}
+                          disabled={!selectedSiteId || submitting || loading}
+                          loading={submitting}
+                          fullWidth
+                        />
+                      </>
+                    ) : (
+                      <Button
+                        title="Punch In"
+                        icon="log-in-outline"
+                        onPress={() => setPunchMode("in")}
+                        disabled={
+                          !isInside || !userLocation || submitting || loading
+                        }
+                        loading={submitting}
+                        fullWidth
+                      />
+                    )}
+                  </>
                 )}
               </View>
 
               {!punchCompleteToday &&
+              !wfhPending &&
+              !wfhChecked &&
               !isInside &&
               userLocation &&
               siteNumbers ? (
@@ -862,6 +1067,9 @@ export function AttendanceScreen() {
                   Move inside the site area ({siteNumbers.radiusMeters} m
                   radius) to punch.
                 </Text>
+              ) : null}
+              {Platform.OS === "android" && keyboardInset > 0 ? (
+                <View style={{ height: keyboardInset }} />
               ) : null}
             </View>
           </>
@@ -1010,6 +1218,58 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  wfhCheckRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  wfhCheckCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  wfhCheckLabel: {
+    ...typography.label,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  wfhCheckHint: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  wfhReasonLabel: {
+    ...typography.caption,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  wfhReasonInput: {
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    minHeight: 72,
+    textAlignVertical: "top",
+    ...typography.bodySmall,
+  },
+  wfhPendingBox: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.xs,
+  },
+  wfhPendingTitle: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  wfhPendingHint: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 16,
   },
   punchOutTimer: {
     width: "100%",

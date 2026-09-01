@@ -22,7 +22,6 @@ import {
 import { Navbar } from '../components/layout';
 import { Input } from '../components/ui';
 import { fetchCleaningLogsForDay } from '../api/cleaningLogs';
-import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -40,6 +39,8 @@ import {
   getDprTechnicianName,
   matchesCleaningSearch,
 } from '../utils/cleaningLogs';
+import { exportCleaningLogsPdf } from '../utils/cleaningLogsPdf';
+import { appAlert } from '../utils/appAlert';
 import { SitesStackParamList } from '../navigation/SitesStack';
 
 type Route = RouteProp<SitesStackParamList, 'SiteCleaningLogs'>;
@@ -137,7 +138,6 @@ export function CleaningLogsScreen() {
   const navigation = useNavigation();
   const route = useRoute<Route>();
   const { siteId, siteName } = route.params;
-  const bottomPad = useContentBottomPadding(spacing.xl);
 
   const [date, setDate] = useState(toDateInputValue(new Date()));
   const [data, setData] = useState<CleaningLogsForDay | null>(null);
@@ -147,6 +147,7 @@ export function CleaningLogsScreen() {
   const [category, setCategory] = useState<CleaningLogCategory>('completed');
   const [search, setSearch] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const selectedDateValue = useMemo(
     () => new Date(`${date}T12:00:00`),
@@ -220,12 +221,21 @@ export function CleaningLogsScreen() {
 
   const rawListData = useMemo((): ListItem[] => {
     if (!data) return [];
-    if (category === 'completed') return data.cleaning_completed;
-    if (category === 'inprogress') return data.cleaning_in_progress;
-    if (category === 'failure') return data.cleaning_failures;
-    if (category === 'not_started') return data.not_started_robots;
-    if (category === 'dpr') return data.dpr;
-    return data.offline_robots_at_time_of_cleaning;
+    let list: ListItem[];
+    if (category === 'completed') list = data.cleaning_completed;
+    else if (category === 'inprogress') list = data.cleaning_in_progress;
+    else if (category === 'failure') list = data.cleaning_failures;
+    else if (category === 'not_started') list = data.not_started_robots;
+    else if (category === 'dpr') list = data.dpr;
+    else list = data.offline_robots_at_time_of_cleaning;
+
+    if (category === 'dpr') return list;
+
+    return [...list].sort((a, b) => {
+      const aNo = 'robot_no' in a && a.robot_no ? String(a.robot_no) : '';
+      const bNo = 'robot_no' in b && b.robot_no ? String(b.robot_no) : '';
+      return aNo.localeCompare(bNo, undefined, { numeric: true, sensitivity: 'base' });
+    });
   }, [category, data]);
 
   const tableWidth = getTableWidth(category);
@@ -288,6 +298,21 @@ export function CleaningLogsScreen() {
     });
   }, [rawListData, search, category]);
 
+  const duplicateRobotNos = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of rawListData) {
+      if (!('robot_no' in item) || !item.robot_no) continue;
+      const key = String(item.robot_no).trim();
+      if (!key) continue;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const duplicates = new Set<string>();
+    for (const [robotNo, count] of counts) {
+      if (count > 1) duplicates.add(robotNo);
+    }
+    return duplicates;
+  }, [rawListData]);
+
   const applyPickedDate = useCallback((picked?: Date) => {
     if (!picked) return;
     setDate(toDateInputValue(picked));
@@ -297,13 +322,60 @@ export function CleaningLogsScreen() {
     setShowDatePicker(false);
   }, []);
 
-  const renderItem = ({ item, index }: { item: ListItem; index: number }) => (
-    <CleaningLogTableRow
-      item={item}
-      index={index + 1}
-      category={category}
-    />
-  );
+  const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
+    const robotNo =
+      'robot_no' in item && item.robot_no ? String(item.robot_no).trim() : '';
+    return (
+      <CleaningLogTableRow
+        item={item}
+        index={index + 1}
+        category={category}
+        highlightRobotNo={Boolean(robotNo && duplicateRobotNos.has(robotNo))}
+      />
+    );
+  };
+
+  const hasExportableData = useMemo(() => {
+    if (!data) return false;
+    return (
+      (data.cleaning_completed?.length || 0) +
+        (data.cleaning_in_progress?.length || 0) +
+        (data.cleaning_failures?.length || 0) +
+        (data.not_started_robots?.length || 0) +
+        (data.offline_robots_at_time_of_cleaning?.length || 0) +
+        (data.dpr?.length || 0) >
+      0
+    );
+  }, [data]);
+
+  const onExportPdf = useCallback(async () => {
+    if (exporting || !data) return;
+    if (!hasExportableData) {
+      appAlert('Download PDF', 'No records to download for this date.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const result = await exportCleaningLogsPdf({
+        siteId,
+        siteName: siteName || siteId,
+        date,
+      });
+      if (result.method === 'downloads') {
+        appAlert(
+          'Downloaded',
+          `${result.fileName} saved to your Downloads folder.`,
+        );
+      }
+    } catch (err) {
+      appAlert(
+        'Download failed',
+        err instanceof Error ? err.message : 'Could not download PDF',
+      );
+    } finally {
+      setExporting(false);
+    }
+  }, [data, date, exporting, hasExportableData, siteId, siteName]);
 
   const dateSelector = (
     <View style={styles.dateBar}>
@@ -429,9 +501,31 @@ export function CleaningLogsScreen() {
         })}
       </ScrollView>
 
-      <Text style={[styles.resultCount, { color: colors.textMuted }]}>
-        {filteredListData.length} of {rawListData.length} records
-      </Text>
+      <View style={styles.resultRow}>
+        <Text style={[styles.resultCount, { color: colors.textMuted }]}>
+          {filteredListData.length} of {rawListData.length} records
+        </Text>
+        <Pressable
+          onPress={() => void onExportPdf()}
+          disabled={exporting || !hasExportableData}
+          style={[
+            styles.exportBtn,
+            {
+              backgroundColor: colors.primary,
+              opacity: exporting || !hasExportableData ? 0.45 : 1,
+            },
+          ]}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color="#04120F" />
+          ) : (
+            <Ionicons name="download-outline" size={16} color="#04120F" />
+          )}
+          <Text style={styles.exportBtnText}>
+            {exporting ? 'Downloading…' : 'Download PDF'}
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 
@@ -541,10 +635,7 @@ export function CleaningLogsScreen() {
             nestedScrollEnabled
             showsHorizontalScrollIndicator
             style={styles.tableScroll}
-            contentContainerStyle={[
-              styles.tableScrollContent,
-              { paddingBottom: bottomPad },
-            ]}
+            contentContainerStyle={styles.tableScrollContent}
           >
             <FlatList
               style={{ width: tableWidth }}
@@ -779,6 +870,26 @@ const styles = StyleSheet.create({
   },
   resultCount: {
     ...typography.caption,
+    flex: 1,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.sm,
+    minHeight: 34,
+  },
+  exportBtnText: {
+    ...typography.caption,
+    fontWeight: '700',
+    color: '#04120F',
   },
   tableCard: {
     borderWidth: StyleSheet.hairlineWidth,

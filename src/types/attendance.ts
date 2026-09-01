@@ -4,6 +4,18 @@ export type PunchLocation = {
   _id?: string;
 };
 
+export type AttendanceSource = "site" | "wfh";
+
+export type WfhRequestStatus = "pending" | "approved" | "rejected";
+
+export type WfhStatus = {
+  id: string;
+  status: WfhRequestStatus;
+  reason?: string;
+  site_id?: string;
+  date?: string;
+};
+
 export type AttendanceRecord = {
   _id: string;
   user_id: string;
@@ -16,6 +28,7 @@ export type AttendanceRecord = {
   punchout_time?: string;
   punchout_location?: PunchLocation;
   punch_out_image?: string;
+  source?: AttendanceSource;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -24,6 +37,7 @@ export type PunchStatus = {
   punchedIn: boolean;
   punchedOut: boolean;
   data: AttendanceRecord | null;
+  wfh: WfhStatus | null;
 };
 
 export type UserAttendanceResult = {

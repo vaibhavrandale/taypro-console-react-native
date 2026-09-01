@@ -1,22 +1,25 @@
-import React from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
-import type { DrawerNavigationProp } from '@react-navigation/drawer';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Navbar } from '../components/layout';
-import { Badge } from '../components/ui';
-import { useAuth } from '../context/AuthContext';
-import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
-import { useTheme } from '../theme';
-import { radius, spacing } from '../theme/spacing';
-import { typography } from '../theme/typography';
-import { AssignedSite } from '../types/auth';
-import type { DrawerParamList } from '../navigation/types';
-import { SitesStackParamList } from '../navigation/SitesStack';
+import React from "react";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  CompositeNavigationProp,
+  useNavigation,
+} from "@react-navigation/native";
+import type { DrawerNavigationProp } from "@react-navigation/drawer";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { Navbar } from "../components/layout";
+import { Badge } from "../components/ui";
+import { useAuth } from "../context/AuthContext";
+import { useContentBottomPadding } from "../hooks/useContentBottomPadding";
+import { useTheme } from "../theme";
+import { radius, spacing } from "../theme/spacing";
+import { typography } from "../theme/typography";
+import { AssignedSite } from "../types/auth";
+import type { DrawerParamList } from "../navigation/types";
+import { SitesStackParamList } from "../navigation/SitesStack";
 
 type Navigation = CompositeNavigationProp<
-  NativeStackNavigationProp<SitesStackParamList, 'AssignedSites'>,
+  NativeStackNavigationProp<SitesStackParamList, "AssignedSites">,
   DrawerNavigationProp<DrawerParamList>
 >;
 
@@ -59,7 +62,7 @@ export function AssignedSitesScreen() {
   const sites = (user?.assigned_sites ?? []).filter((site) => site.site_id);
 
   const renderSite = ({ item }: { item: AssignedSite }) => {
-    const siteName = item.site_name || item.site_id;
+    const siteName = item.siteName || item.site_id;
 
     return (
       <View
@@ -73,9 +76,16 @@ export function AssignedSitesScreen() {
       >
         <View style={styles.siteTopRow}>
           <View
-            style={[styles.iconWrap, { backgroundColor: colors.backgroundTertiary }]}
+            style={[
+              styles.iconWrap,
+              { backgroundColor: colors.backgroundTertiary },
+            ]}
           >
-            <Ionicons name="business-outline" size={22} color={colors.primary} />
+            <Ionicons
+              name="business-outline"
+              size={22}
+              color={colors.primary}
+            />
           </View>
           <View style={styles.siteInfo}>
             <Text
@@ -101,7 +111,7 @@ export function AssignedSitesScreen() {
             label="Blockwise"
             icon="grid-outline"
             onPress={() =>
-              navigation.navigate('Blockwise', {
+              navigation.navigate("Blockwise", {
                 siteId: item.site_id,
                 siteName,
               })
@@ -111,7 +121,7 @@ export function AssignedSitesScreen() {
             label="Logs"
             icon="list-outline"
             onPress={() =>
-              navigation.navigate('SiteCleaningLogs', {
+              navigation.navigate("SiteCleaningLogs", {
                 siteId: item.site_id,
                 siteName,
               })
@@ -121,7 +131,7 @@ export function AssignedSitesScreen() {
             label="Uptime / Summary"
             icon="stats-chart-outline"
             onPress={() =>
-              navigation.navigate('RobotUptime', {
+              navigation.navigate("RobotUptime", {
                 siteId: item.site_id,
                 siteName,
               })
@@ -131,7 +141,7 @@ export function AssignedSitesScreen() {
             label="Tracking"
             icon="navigate-outline"
             onPress={() =>
-              navigation.navigate('RobotTracking', {
+              navigation.navigate("RobotTracking", {
                 siteId: item.site_id,
                 siteName,
               })
@@ -161,7 +171,7 @@ export function AssignedSitesScreen() {
         ListHeaderComponent={
           sites.length > 0 ? (
             <Text style={[styles.countText, { color: colors.textMuted }]}>
-              {sites.length} assigned site{sites.length === 1 ? '' : 's'}
+              {sites.length} assigned site{sites.length === 1 ? "" : "s"}
             </Text>
           ) : null
         }
@@ -200,7 +210,7 @@ const styles = StyleSheet.create({
   },
   emptyListContent: {
     flexGrow: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   countText: {
     ...typography.caption,
@@ -214,16 +224,16 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   siteTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.md,
   },
   iconWrap: {
     width: 44,
     height: 44,
     borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   siteInfo: {
     flex: 1,
@@ -239,8 +249,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   actionLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.sm,
     borderWidth: 1,
     borderRadius: radius.md,

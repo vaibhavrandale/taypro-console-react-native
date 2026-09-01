@@ -302,11 +302,13 @@ export function getTrackVisualState(
     !cleaning.cleaning_cancelled &&
     !cleaning.battery_dead
   ) {
+    // Point 40 = at dock after reverse pass, finish flag not yet received.
+    // Still treat as return-to-DS so the gear spins anticlockwise (ccw).
     const isReturn =
       phase === 'Reverse Cleaning' ||
       phase === 'At Reverse Station' ||
       phase === 'Ready for Reverse Cleaning' ||
-      (highestPoint >= 29 && highestPoint <= 39);
+      (highestPoint >= 29 && highestPoint <= 40);
     return {
       state: 'cleaning-in-progress',
       borderColor: 'rgb(255, 187, 61)',

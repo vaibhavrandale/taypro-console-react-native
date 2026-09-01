@@ -52,7 +52,12 @@ export function AttendanceHistoryCard({ record, isDark, onImagePress }: Props) {
         <Text style={[styles.dateText, { color: colors.textPrimary }]}>
           {formatDateIST(record.punchin_time)}
         </Text>
-        <Badge label={record.site_id} variant="info" size="sm" />
+        <View style={styles.headerBadges}>
+          {record.source === "wfh" ? (
+            <Badge label="WFH" variant="success" size="sm" />
+          ) : null}
+          <Badge label={record.site_id} variant="info" size="sm" />
+        </View>
       </View>
 
       {record.punchin_time ? (
@@ -156,6 +161,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm,
+  },
+  headerBadges: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    flexShrink: 0,
   },
   dateText: {
     ...typography.label,

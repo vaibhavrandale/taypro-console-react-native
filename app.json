@@ -15,7 +15,9 @@
       "bundleIdentifier": "in.taypro.console",
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": true,
-        "UIBackgroundModes": ["location"],
+        "UIBackgroundModes": [
+          "location"
+        ],
         "NSMicrophoneUsageDescription": "Allow Nectyr to use your microphone for voice calls with other console users."
       }
     },
@@ -36,7 +38,9 @@
         "android.permission.BLUETOOTH",
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.ACCESS_NETWORK_STATE",
-        "android.permission.ACCESS_WIFI_STATE"
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE"
       ],
       "statusBar": {
         "barStyle": "light-content",
@@ -84,7 +88,8 @@
           "color": "#1A2547",
           "defaultChannel": "calls"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "eas": {

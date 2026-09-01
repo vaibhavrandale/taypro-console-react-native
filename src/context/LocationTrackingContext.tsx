@@ -86,7 +86,11 @@ export function LocationTrackingProvider({
 
     try {
       const status = await fetchPunchStatus(user._id);
-      const shouldTrack = Boolean(status.punchedIn && !status.punchedOut);
+      const shouldTrack = Boolean(
+        status.punchedIn &&
+          !status.punchedOut &&
+          status.data?.source !== "wfh",
+      );
 
       if (shouldTrack) {
         const attendanceId = status.data?._id;

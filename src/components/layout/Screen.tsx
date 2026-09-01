@@ -17,6 +17,7 @@ type Props = {
   style?: ViewStyle;
   keyboardShouldPersistTaps?: 'always' | 'never' | 'handled';
   refreshControl?: React.ReactElement<RefreshControlProps>;
+  scrollRef?: React.Ref<ScrollView>;
 };
 
 export function Screen({
@@ -26,6 +27,7 @@ export function Screen({
   style,
   keyboardShouldPersistTaps = 'always',
   refreshControl,
+  scrollRef,
 }: Props) {
   const { colors } = useTheme();
   const bottomPad = useContentBottomPadding(spacing.xl);
@@ -47,9 +49,11 @@ export function Screen({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {scroll ? (
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps={keyboardShouldPersistTaps}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
           refreshControl={refreshControl}
         >

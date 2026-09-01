@@ -33,7 +33,20 @@ type Props = {
   item: CleaningRow;
   index: number;
   category: CleaningLogCategory;
+  /** When true, robot_no appears more than once in this table. */
+  highlightRobotNo?: boolean;
 };
+
+function robotBadgeTone(
+  category: CleaningLogCategory,
+): keyof ThemeColors['badge'] {
+  if (category === 'completed') return 'success';
+  if (category === 'inprogress') return 'warning';
+  if (category === 'failure') return 'error';
+  if (category === 'not_started') return 'info';
+  if (category === 'offline') return 'neutral';
+  return 'neutral';
+}
 
 function isCleaningLog(item: CleaningRow): item is CleaningLogRecord {
   return 'cleaning' in item || ('comments' in item && 'row_length' in item);
@@ -51,15 +64,45 @@ function isDprRecord(item: CleaningRow): item is DprRecord {
   );
 }
 
-function Cell({ width, children, colors, bold }: { width: number; children: React.ReactNode; colors: ThemeColors; bold?: boolean }) {
+function Cell({
+  width,
+  children,
+  colors,
+  bold,
+  numberOfLines = 2,
+  fullText = false,
+  highlight = false,
+  highlightTone = 'error',
+}: {
+  width: number;
+  children: React.ReactNode;
+  colors: ThemeColors;
+  bold?: boolean;
+  numberOfLines?: number;
+  /** When true, show the full string with no line clamp. */
+  fullText?: boolean;
+  /** Duplicate robot_no highlight. */
+  highlight?: boolean;
+  highlightTone?: keyof ThemeColors['badge'];
+}) {
+  const badge = colors.badge[highlightTone];
   return (
     <Text
       style={[
         styles.cell,
         bold && styles.cellBold,
-        { width, color: bold ? colors.textPrimary : colors.textSecondary },
+        highlight && styles.cellHighlight,
+        {
+          width,
+          color: highlight
+            ? badge.text
+            : bold
+              ? colors.textPrimary
+              : colors.textSecondary,
+          backgroundColor: highlight ? badge.bg : undefined,
+        },
       ]}
-      numberOfLines={2}
+      {...(fullText ? {} : { numberOfLines })}
     >
       {children}
     </Text>
@@ -134,7 +177,7 @@ function HeaderShell({
 const cleaningWidths = {
   sr: 34,
   robot: 108,
-  status: 96,
+  status: 240,
   block: 84,
   rowNo: 72,
   rowLength: 92,
@@ -206,8 +249,14 @@ function TechnicianCell({
   );
 }
 
-export function CleaningLogTableRow({ item, index, category }: Props) {
+export function CleaningLogTableRow({
+  item,
+  index,
+  category,
+  highlightRobotNo = false,
+}: Props) {
   const { colors } = useTheme();
+  const robotTone = robotBadgeTone(category);
 
   if (category === 'dpr' && isDprRecord(item)) {
     const ops = item.robots_operational_details;
@@ -251,7 +300,13 @@ export function CleaningLogTableRow({ item, index, category }: Props) {
     const offline = item as OfflineRobotLog;
     return (
       <RowShell width={OFFLINE_LOG_TABLE_WIDTH} colors={colors}>
-        <Cell width={108} colors={colors} bold>
+        <Cell
+          width={108}
+          colors={colors}
+          bold
+          highlight={highlightRobotNo}
+          highlightTone={robotTone}
+        >
           {offline.robot_no || '—'}
         </Cell>
         <Cell width={84} colors={colors}>
@@ -270,7 +325,13 @@ export function CleaningLogTableRow({ item, index, category }: Props) {
   if (category === 'not_started' && isNotStarted(item)) {
     return (
       <RowShell width={NOT_STARTED_TABLE_WIDTH} colors={colors}>
-        <Cell width={108} colors={colors} bold>
+        <Cell
+          width={108}
+          colors={colors}
+          bold
+          highlight={highlightRobotNo}
+          highlightTone={robotTone}
+        >
           {item.robot_no || '—'}
         </Cell>
         <Cell width={84} colors={colors}>
@@ -292,10 +353,19 @@ export function CleaningLogTableRow({ item, index, category }: Props) {
 
   return (
     <RowShell width={CLEANING_LOG_TABLE_WIDTH} colors={colors}>
-      <Cell width={cleaningWidths.robot} colors={colors} bold>
+      <Cell width={cleaningWidths.sr} colors={colors}>
+        {index}
+      </Cell>
+      <Cell
+        width={cleaningWidths.robot}
+        colors={colors}
+        bold
+        highlight={highlightRobotNo}
+        highlightTone={robotTone}
+      >
         {item.robot_no || '—'}
       </Cell>
-      <Cell width={cleaningWidths.status} colors={colors}>
+      <Cell width={cleaningWidths.status} colors={colors} fullText>
         {getCleaningNote(item)}
       </Cell>
       <Cell width={cleaningWidths.block} colors={colors}>
@@ -377,6 +447,7 @@ export function CleaningLogTableHeader({
 
   return (
     <HeaderShell width={CLEANING_LOG_TABLE_WIDTH} colors={colors}>
+      <HeaderCell width={cleaningWidths.sr} label="Sr" colors={colors} />
       <HeaderCell width={cleaningWidths.robot} label="Robot No" colors={colors} />
       <HeaderCell width={cleaningWidths.status} label="Status" colors={colors} />
       <HeaderCell width={cleaningWidths.block} label="Block" colors={colors} />
@@ -475,5 +546,12 @@ const styles = StyleSheet.create({
   },
   cellBold: {
     fontWeight: '600',
+  },
+  cellHighlight: {
+    fontWeight: '700',
+    borderRadius: 4,
+    overflow: 'hidden',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
   },
 });

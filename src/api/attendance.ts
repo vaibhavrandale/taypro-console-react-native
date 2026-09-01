@@ -1,5 +1,5 @@
 import { apiFetch } from './client';
-import { PunchStatus, UserAttendanceResult } from '../types/attendance';
+import { PunchStatus, UserAttendanceResult, WfhStatus } from '../types/attendance';
 import type { AttendanceRecord } from '../types/attendance';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,9 +20,30 @@ function extractError(payload: unknown, fallback: string) {
   return String(errorPayload.message ?? errorPayload.error ?? fallback);
 }
 
+function emptyPunchStatus(): PunchStatus {
+  return { punchedIn: false, punchedOut: false, data: null, wfh: null };
+}
+
+function normalizeWfh(value: unknown): WfhStatus | null {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (status !== 'pending' && status !== 'approved' && status !== 'rejected') {
+    return null;
+  }
+  const id = value.id ?? value._id;
+  if (typeof id !== 'string' && typeof id !== 'number') return null;
+  return {
+    id: String(id),
+    status,
+    reason: typeof value.reason === 'string' ? value.reason : undefined,
+    site_id: typeof value.site_id === 'string' ? value.site_id : undefined,
+    date: typeof value.date === 'string' ? value.date : undefined,
+  };
+}
+
 function normalizePunchStatus(payload: unknown): PunchStatus {
   if (!isRecord(payload)) {
-    return { punchedIn: false, punchedOut: false, data: null };
+    return emptyPunchStatus();
   }
 
   // Support { punchedIn, punchedOut, data } or { success, data: { punchedIn, ... } }
@@ -44,6 +65,7 @@ function normalizePunchStatus(payload: unknown): PunchStatus {
     punchedIn,
     punchedOut: punchedIn ? punchedOut : false,
     data: record,
+    wfh: normalizeWfh(body.wfh),
   };
 }
 
@@ -129,10 +151,36 @@ export async function fetchPunchStatus(expectedUserId: string): Promise<PunchSta
     normalized.data?.user_id &&
     String(normalized.data.user_id) !== String(expectedUserId)
   ) {
-    return { punchedIn: false, punchedOut: false, data: null };
+    return emptyPunchStatus();
   }
 
   return normalized;
+}
+
+export async function requestWfh(params: {
+  siteId: string;
+  reason: string;
+}): Promise<string> {
+  const response = await apiFetch('/technician-attendance/wfh-request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      site_id: params.siteId,
+      reason: params.reason,
+    }),
+  });
+
+  const payload = await parseJson(response);
+
+  if (!response.ok) {
+    throw new Error(extractError(payload, 'WFH request failed'));
+  }
+
+  if (isRecord(payload) && typeof payload.message === 'string') {
+    return payload.message;
+  }
+
+  return 'WFH request sent — waiting for Service Admin/User approval';
 }
 
 export async function punchIn(params: {

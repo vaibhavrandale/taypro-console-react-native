@@ -115,7 +115,7 @@ export type CleaningLogCategory =
   | 'offline'
   | 'dpr';
 
-export const CLEANING_LOG_TABLE_WIDTH = 1020;
+export const CLEANING_LOG_TABLE_WIDTH = 1202;
 export const OFFLINE_LOG_TABLE_WIDTH = 420;
 export const NOT_STARTED_TABLE_WIDTH = 460;
 export const DPR_TABLE_WIDTH = 920;
