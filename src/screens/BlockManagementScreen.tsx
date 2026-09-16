@@ -14,6 +14,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { Navbar } from '../components/layout';
 import { CompactCommandButton } from '../components/ui';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { fetchRobotsBySiteAndBlock, sendMqttMulticastDownlink } from '../api/robots';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme';
@@ -23,6 +24,7 @@ import { typography } from '../theme/typography';
 import { RobotCommand } from '../types/robotOperating';
 import { BlockRobotSummary } from '../types/robotSearch';
 import { formatRobotTileCompact } from '../utils/blockSort';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { getBatteryPercent, isRobotOnline } from '../utils/robot';
 import type { DrawerParamList } from '../navigation/types';
 
@@ -138,7 +140,7 @@ export function BlockManagementScreen() {
   const [robots, setRobots] = useState<BlockRobotSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
   const [bulkCommandLoading, setBulkCommandLoading] = useState<RobotCommand | null>(
     null,
   );
@@ -159,7 +161,7 @@ export function BlockManagementScreen() {
         setRobots(data);
       } catch (err) {
         setRobots([]);
-        setError(err instanceof Error ? err.message : 'Failed to load robots');
+        setError(asLoadError(err, 'Failed to load robots'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -280,10 +282,7 @@ export function BlockManagementScreen() {
     if (error) {
       return (
         <View style={styles.centerState}>
-          <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-          <Pressable onPress={() => void loadRobots()}>
-            <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
-          </Pressable>
+          <ScreenError error={error} onRetry={() => void loadRobots()} />
         </View>
       );
     }
@@ -423,6 +422,17 @@ export function BlockManagementScreen() {
       </View>
     );
   };
+
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage
+        title="Block Management"
+        subtitle={`${block} · ${siteName ?? siteId}`}
+        error={error}
+        onBack={() => navigation.goBack()}
+      />
+    );
+  }
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>

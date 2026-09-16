@@ -5,6 +5,10 @@ import {
   isSessionExpiredPayload,
   notifySessionExpired,
 } from '../utils/sessionExpiry';
+import {
+  SubscriptionError,
+  subscriptionErrorFromPayload,
+} from '../utils/subscription';
 
 const TOKEN_STORAGE_KEY = 'taypro_auth_token';
 
@@ -61,5 +65,16 @@ export async function apiFetch(
   });
 
   await checkSessionExpired(response);
+
+  if (!response.ok) {
+    try {
+      const payload: unknown = await response.clone().json();
+      const sub = subscriptionErrorFromPayload(payload);
+      if (sub) throw sub;
+    } catch (err) {
+      if (err instanceof SubscriptionError) throw err;
+    }
+  }
+
   return response;
 }

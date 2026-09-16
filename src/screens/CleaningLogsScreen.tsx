@@ -20,8 +20,10 @@ import {
   getTableWidth,
 } from '../components/cleaningLogs/CleaningLogTableRow';
 import { Navbar } from '../components/layout';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { Input } from '../components/ui';
 import { fetchCleaningLogsForDay } from '../api/cleaningLogs';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -143,7 +145,7 @@ export function CleaningLogsScreen() {
   const [data, setData] = useState<CleaningLogsForDay | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
   const [category, setCategory] = useState<CleaningLogCategory>('completed');
   const [search, setSearch] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -168,9 +170,7 @@ export function CleaningLogsScreen() {
         setData(result);
       } catch (err) {
         setData(null);
-        setError(
-          err instanceof Error ? err.message : 'Failed to load cleaning logs',
-        );
+        setError(asLoadError(err, 'Failed to load cleaning logs'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -582,6 +582,17 @@ export function CleaningLogsScreen() {
     )
   ) : null;
 
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage
+        title="Cleaning Logs"
+        subtitle={siteName || siteId}
+        error={error}
+        onBack={() => navigation.goBack()}
+      />
+    );
+  }
+
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <Navbar
@@ -611,22 +622,7 @@ export function CleaningLogsScreen() {
           </Text>
         </View>
       ) : error ? (
-        <View style={styles.errorWrap}>
-          <View
-            style={[
-              styles.errorCard,
-              { backgroundColor: colors.badge.error.bg },
-            ]}
-          >
-            <Ionicons name="alert-circle" size={22} color={colors.danger} />
-            <Text style={[styles.errorTitle, { color: colors.danger }]}>
-              Could not load cleaning logs
-            </Text>
-            <Text style={[styles.errorText, { color: colors.textSecondary }]}>
-              {error}
-            </Text>
-          </View>
-        </View>
+        <ScreenError error={error} onRetry={() => void loadLogs()} />
       ) : (
         <View style={styles.content}>
           <View style={styles.controls}>{controlsHeader}</View>

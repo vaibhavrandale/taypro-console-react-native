@@ -4,7 +4,10 @@ import type { SitesStackParamList } from './SitesStack';
 import type { TimersStackParamList } from './TimersStack';
 import type { ServiceTicketsStackParamList } from './ServiceTicketsStack';
 import type { PreventiveMaintenanceStackParamList } from './PreventiveMaintenanceStack';
+import type { ClientTicketsStackParamList } from './ClientTicketsStack';
 import type { ExpenseClaimsStackParamList } from './ExpenseClaimsStack';
+import type { AnalyticsStackParamList } from './AnalyticsStack';
+import type { ExternalUsersStackParamList } from './ExternalUsersStack';
 
 export type AttendanceStackParamList = {
   AttendanceHome: undefined;
@@ -53,15 +56,21 @@ export type DrawerParamList = {
         siteName?: string;
       }
     | undefined;
+  Analytics: NavigatorScreenParams<AnalyticsStackParamList> | undefined;
   RobotCommands: undefined;
   RobotActivity: undefined;
   Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;
+  ExternalUsers: NavigatorScreenParams<ExternalUsersStackParamList> | undefined;
   ServiceTickets: NavigatorScreenParams<ServiceTicketsStackParamList> | undefined;
+  ClientTickets: NavigatorScreenParams<ClientTicketsStackParamList> | undefined;
   ServiceInventory: undefined;
   PreventiveMaintenance: NavigatorScreenParams<PreventiveMaintenanceStackParamList> | undefined;
   ExpenseClaims: NavigatorScreenParams<ExpenseClaimsStackParamList> | undefined;
   Notifications: undefined;
   Settings: undefined;
+  About: undefined;
+  Pricing: undefined;
+  MySubscription: undefined;
   Dummy: undefined;
 };

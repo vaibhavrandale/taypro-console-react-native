@@ -23,9 +23,14 @@ import { radius, spacing } from "../../theme/spacing";
 import { typography } from "../../theme/typography";
 import {
   canAccessAttendance,
+  canAccessAnalytics,
+  canAccessClientTickets,
   canAccessExpenses,
   canAccessPreventiveMaintenance,
   canAccessServiceInventory,
+  canAccessServiceTickets,
+  canAccessSubscriptionPages,
+  canManageExternalUsers,
   canSubmitDpr,
 } from "../../utils/roles";
 
@@ -34,6 +39,7 @@ export type DrawerRoute = {
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   nestedScreen?: string;
+  subscription?: boolean;
 };
 
 type MenuSection = {
@@ -72,11 +78,13 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         name: "RobotUptime",
         label: "Robot Uptime",
         icon: "stats-chart-outline",
+        subscription: true,
       },
       {
         name: "RobotTracking",
         label: "Robot Tracking",
         icon: "navigate-outline",
+        subscription: true,
       },
       {
         name: "RobotCommands",
@@ -88,13 +96,13 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         label: "Command Activity",
         icon: "hardware-chip-outline",
       },
-      { name: "Timers", label: "Timers", icon: "timer-outline" },
+      { name: "Timers", label: "Timers", icon: "timer-outline", subscription: true },
     ],
   },
   {
     title: "Management",
     items: [
-      { name: "Users", label: "Users", icon: "people-outline" },
+      { name: "Users", label: "Voice Call", icon: "call-outline" },
       {
         name: "ServiceTickets",
         label: "Service Tickets",
@@ -106,6 +114,7 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         icon: "cube-outline",
       },
       { name: "Settings", label: "Settings", icon: "settings-outline" },
+      { name: "About", label: "About", icon: "information-circle-outline" },
       { name: "Dummy", label: "Dummy", icon: "color-palette-outline" },
     ],
   },
@@ -132,18 +141,57 @@ function buildMenuSections(role?: string): MenuSection[] {
     });
   }
 
-  const managementItems = BASE_MENU_SECTIONS[2].items.filter(
-    (item) =>
-      item.name !== "ServiceInventory" || canAccessServiceInventory(role),
-  );
+  const managementItems = BASE_MENU_SECTIONS[2].items.filter((item) => {
+    if (item.name === "ServiceInventory") return canAccessServiceInventory(role);
+    if (item.name === "ServiceTickets") return canAccessServiceTickets(role);
+    return true;
+  });
+  if (canManageExternalUsers(role)) {
+    const usersIndex = managementItems.findIndex(
+      (item) => item.name === "Users",
+    );
+    const insertAt = usersIndex >= 0 ? usersIndex + 1 : 0;
+    managementItems.splice(insertAt, 0, {
+      name: "ExternalUsers",
+      label: "Manage Users",
+      icon: "person-add-outline",
+    });
+  }
+
   if (canAccessPreventiveMaintenance(role)) {
     const ticketsIndex = managementItems.findIndex(
       (item) => item.name === "ServiceTickets",
     );
-    managementItems.splice(ticketsIndex + 1, 0, {
+    const usersIndex = managementItems.findIndex(
+      (item) => item.name === "Users",
+    );
+    const insertAt =
+      ticketsIndex >= 0
+        ? ticketsIndex + 1
+        : usersIndex >= 0
+          ? usersIndex + 1
+          : 0;
+    managementItems.splice(insertAt, 0, {
       name: "PreventiveMaintenance",
       label: "Preventive Maintenance",
       icon: "build-outline",
+      subscription: true,
+    });
+  }
+
+  if (canAccessClientTickets(role)) {
+    const pmIndex = managementItems.findIndex(
+      (item) => item.name === "PreventiveMaintenance",
+    );
+    const usersIndex = managementItems.findIndex(
+      (item) => item.name === "Users",
+    );
+    const insertAt =
+      pmIndex >= 0 ? pmIndex + 1 : usersIndex >= 0 ? usersIndex + 1 : 0;
+    managementItems.splice(insertAt, 0, {
+      name: "ClientTickets",
+      label: "Client Tickets",
+      icon: "ticket-outline",
     });
   }
 
@@ -162,9 +210,41 @@ function buildMenuSections(role?: string): MenuSection[] {
     });
   }
 
+  if (canAccessSubscriptionPages(role)) {
+    const settingsIndex = managementItems.findIndex(
+      (item) => item.name === "Settings",
+    );
+    const insertAt = settingsIndex >= 0 ? settingsIndex : managementItems.length;
+    managementItems.splice(
+      insertAt,
+      0,
+      { name: "Pricing", label: "Pricing", icon: "pricetag-outline" },
+      {
+        name: "MySubscription",
+        label: "My Subscription",
+        icon: "diamond-outline",
+      },
+    );
+  }
+
+  const fleetItems = [...BASE_MENU_SECTIONS[1].items];
+  if (canAccessAnalytics(role)) {
+    const trackingIndex = fleetItems.findIndex(
+      (item) => item.name === "RobotTracking",
+    );
+    const insertAt =
+      trackingIndex >= 0 ? trackingIndex + 1 : fleetItems.length;
+    fleetItems.splice(insertAt, 0, {
+      name: "Analytics",
+      label: "Analytics",
+      icon: "bar-chart-outline",
+      subscription: true,
+    });
+  }
+
   return [
     { title: "Main", items: mainItems },
-    BASE_MENU_SECTIONS[1],
+    { title: "Fleet", items: fleetItems },
     { title: "Management", items: managementItems },
   ];
 }
@@ -222,9 +302,16 @@ type MenuItemProps = {
   focused: boolean;
   onPress: () => void;
   badgeCount?: number;
+  showSubscriptionBadge?: boolean;
 };
 
-function MenuItem({ item, focused, onPress, badgeCount }: MenuItemProps) {
+function MenuItem({
+  item,
+  focused,
+  onPress,
+  badgeCount,
+  showSubscriptionBadge,
+}: MenuItemProps) {
   const { colors } = useTheme();
 
   return (
@@ -250,6 +337,9 @@ function MenuItem({ item, focused, onPress, badgeCount }: MenuItemProps) {
       >
         {item.label}
       </Text>
+      {showSubscriptionBadge ? (
+        <Ionicons name="diamond" size={12} color="#FACC15" />
+      ) : null}
       {badgeCount && badgeCount > 0 ? (
         <Badge
           label={badgeCount > 9 ? "9+" : String(badgeCount)}
@@ -370,6 +460,10 @@ export function Sidebar(props: DrawerContentComponentProps) {
                     item.name === "Notifications"
                       ? notificationBadge
                       : undefined
+                  }
+                  showSubscriptionBadge={
+                    Boolean(item.subscription) &&
+                    canAccessSubscriptionPages(user?.role)
                   }
                 />
               ))}

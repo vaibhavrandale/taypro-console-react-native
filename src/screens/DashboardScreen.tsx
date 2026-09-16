@@ -1,19 +1,21 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { Navbar, Screen } from "../components/layout";
 import { RobotBatterySummary } from "../components/dashboard/RobotBatterySummary";
 import { GatewayMapCard } from "../components/dashboard/GatewayMapCard";
 import { WeatherCard } from "../components/dashboard/WeatherCard";
-import { Badge, CompactCommandButton } from "../components/ui";
+import { Badge } from "../components/ui";
 import { useSiteDetails } from "../context/SiteDetailsContext";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../theme";
@@ -22,6 +24,13 @@ import { typography } from "../theme/typography";
 import { getBatteryPercent, isRobotOnline } from "../utils/robot";
 import { appAlert } from "../utils/appAlert";
 import { sendMqttMulticastDownlink } from "../api/robots";
+import { hasUsableWeather } from "../api/weather";
+import {
+  canAccessAnalytics,
+  canAccessClientTickets,
+  canAccessPreventiveMaintenance,
+} from "../utils/roles";
+import type { AssignedSite } from "../types/auth";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import type { CompositeNavigationProp } from "@react-navigation/native";
 import type { MainTabParamList } from "../navigation/MainTabs";
@@ -34,6 +43,18 @@ type DashboardNavigationProp = CompositeNavigationProp<
 >;
 
 const GATEWAY_PREVIEW_LIMIT = 5;
+
+function getSiteLabel(site: AssignedSite) {
+  const extra = site as AssignedSite & { site_name?: string };
+  return extra.site_name || site.siteName || site.site_id;
+}
+
+function greetingFor(name: string) {
+  const hour = new Date().getHours();
+  const hello =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  return `${hello}, ${name}`;
+}
 
 function normalizeGatewayStatus(status?: string | boolean | null): string {
   if (status === true) return "online";
@@ -83,253 +104,132 @@ function formatUplink(date?: string) {
   return parsed.toLocaleString();
 }
 
-type StatCardProps = {
-  label: string;
-  value: string | number;
-  badge: string;
-  variant: "success" | "info" | "warning" | "error" | "neutral" | "purple";
-};
-
-function StatCard({ label, value, badge, variant }: StatCardProps) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.statCard,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <Badge label={badge} variant={variant} size="sm" />
-      <Text style={[styles.statValue, { color: colors.textPrimary }]}>
-        {value}
-      </Text>
-      <Text style={[styles.statLabel, { color: colors.textSecondary }]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-type SummaryMetricProps = {
-  label: string;
-  value: string | number;
-  color: string;
-};
-
-function SummaryMetric({ label, value, color }: SummaryMetricProps) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.summaryMetric,
-        {
-          backgroundColor: colors.backgroundTertiary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <Text style={[styles.summaryMetricLabel, { color: colors.textMuted }]}>
-        {label}
-      </Text>
-      <Text style={[styles.summaryMetricValue, { color }]}>{value}</Text>
-    </View>
-  );
-}
-
-type TopSummaryCardsProps = {
-  totalRobots: number;
-  onlineRobots: number;
-  offlineRobots: number;
-  totalGateways: number;
-  onlineGateways: number;
-  cleaning: {
-    completed: number;
-    inprogress: number;
-    failure: number;
-  };
-  onBlockwise: () => void;
-  onCleaningLog: () => void;
-  onEmergencyStop: () => void;
-  commandSending: boolean;
-  canSendCommands: boolean;
-};
-
-function TopSummaryCards({
-  totalRobots,
-  onlineRobots,
-  offlineRobots,
-  totalGateways,
-  onlineGateways,
-  cleaning,
-  onBlockwise,
-  onCleaningLog,
-  onEmergencyStop,
-  commandSending,
-  canSendCommands,
-}: TopSummaryCardsProps) {
-  const { colors } = useTheme();
-  const gatewayPercent =
-    totalGateways > 0 ? Math.round((onlineGateways / totalGateways) * 100) : 0;
-
-  return (
-    <View style={styles.topCardsStack}>
-      <View
-        style={[
-          styles.topCard,
-          { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-        ]}
-      >
-        <View style={styles.topCardHeader}>
-          <View style={styles.topCardTitleRow}>
-            <Ionicons name="hardware-chip-outline" size={13} color={colors.textMuted} />
-            <Text style={[styles.topCardTitle, { color: colors.textSecondary }]}>
-              Robots
-            </Text>
-          </View>
-          <View style={styles.topCardHeaderActions}>
-            <CompactCommandButton
-              label={commandSending ? "..." : "Stop All"}
-              icon="stop"
-              tone="danger"
-              size="xs"
-              filled
-              onPress={onEmergencyStop}
-              loading={commandSending}
-              disabled={!canSendCommands || commandSending}
-              style={styles.stopAllBtn}
-            />
-            <Pressable
-              onPress={onBlockwise}
-              style={[styles.topCardAction, { backgroundColor: colors.badge.info.bg }]}
-            >
-              <Text style={[styles.topCardActionText, { color: colors.badge.info.text }]}>
-                Blockwise →
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-        <View style={styles.summaryMetricsRow}>
-          <SummaryMetric label="Total" value={totalRobots} color={colors.primary} />
-          <SummaryMetric label="Online" value={onlineRobots} color={colors.primary} />
-          <SummaryMetric label="Offline" value={offlineRobots} color={colors.danger} />
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.topCard,
-          { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-        ]}
-      >
-        <View style={styles.topCardHeader}>
-          <View style={styles.topCardTitleRow}>
-            <Ionicons name="flash-outline" size={13} color={colors.badge.warning.text} />
-            <Text style={[styles.topCardTitle, { color: colors.textSecondary }]}>
-              Today's Cleaning
-            </Text>
-          </View>
-          <Pressable
-            onPress={onCleaningLog}
-            style={[styles.topCardAction, { backgroundColor: colors.badge.info.bg }]}
-          >
-            <Text style={[styles.topCardActionText, { color: colors.badge.info.text }]}>
-              Log →
-            </Text>
-          </Pressable>
-        </View>
-        <View style={styles.summaryMetricsRow}>
-          <SummaryMetric
-            label="Completed"
-            value={cleaning.completed}
-            color={colors.primary}
-          />
-          <SummaryMetric
-            label="Running"
-            value={cleaning.inprogress}
-            color={colors.badge.warning.text}
-          />
-          <SummaryMetric label="Failed" value={cleaning.failure} color={colors.danger} />
-        </View>
-      </View>
-
-      <View
-        style={[
-          styles.topCard,
-          { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
-        ]}
-      >
-        <View style={styles.topCardHeader}>
-          <View style={styles.topCardTitleRow}>
-            <Ionicons name="radio-outline" size={13} color={colors.textMuted} />
-            <Text style={[styles.topCardTitle, { color: colors.textSecondary }]}>
-              Gateways
-            </Text>
-          </View>
-        </View>
-        <View style={styles.gatewayStatusRow}>
-          <Text style={[styles.gatewayOnlineValue, { color: colors.primary }]}>
-            {onlineGateways}
-          </Text>
-          <Text style={[styles.gatewayTotalText, { color: colors.textSecondary }]}>
-            / {totalGateways} online
-          </Text>
-        </View>
-        <View style={[styles.gatewayTrack, { backgroundColor: colors.backgroundTertiary }]}>
-          <View
-            style={[
-              styles.gatewayFill,
-              { width: `${gatewayPercent}%`, backgroundColor: colors.primary },
-            ]}
-          />
-        </View>
-      </View>
-    </View>
-  );
-}
-
-type SectionCardProps = {
+function SectionHeader({
+  eyebrow,
+  title,
+  actionLabel,
+  onAction,
+}: {
+  eyebrow?: string;
   title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-};
-
-function SectionCard({ title, subtitle, children }: SectionCardProps) {
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   const { colors } = useTheme();
-
   return (
-    <View
-      style={[
-        styles.sectionCard,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <View>
-        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text
-            style={[styles.sectionSubtitle, { color: colors.textSecondary }]}
-          >
-            {subtitle}
+    <View style={styles.sectionHeader}>
+      <View style={styles.sectionHeaderCopy}>
+        {eyebrow ? (
+          <Text style={[styles.sectionEyebrow, { color: colors.textMuted }]}>
+            {eyebrow}
           </Text>
         ) : null}
+        <Text style={[styles.sectionHeading, { color: colors.textPrimary }]}>
+          {title}
+        </Text>
       </View>
-      {children}
+      {actionLabel && onAction ? (
+        <Pressable onPress={onAction} hitSlop={8}>
+          <Text style={[styles.sectionAction, { color: colors.primary }]}>
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
+  );
+}
+
+type KpiTileProps = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string | number;
+  hint: string;
+  accent: string;
+  valueColor?: string;
+  hintNode?: React.ReactNode;
+};
+
+function KpiTile({
+  icon,
+  label,
+  value,
+  hint,
+  accent,
+  valueColor,
+  hintNode,
+}: KpiTileProps) {
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[
+        styles.kpiTile,
+        {
+          backgroundColor: colors.backgroundSecondary,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <View style={[styles.kpiIcon, { backgroundColor: `${accent}22` }]}>
+        <Ionicons name={icon} size={16} color={accent} />
+      </View>
+      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.kpiValue, { color: valueColor ?? colors.textPrimary }]}>
+        {value}
+      </Text>
+      {hintNode ?? (
+        <Text style={[styles.kpiHint, { color: colors.textSecondary }]} numberOfLines={1}>
+          {hint}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+type QuickAction = {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  accent: string;
+  onPress: () => void;
+};
+
+function QuickActions({ actions }: { actions: QuickAction[] }) {
+  const { colors } = useTheme();
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.quickRow}
+    >
+      {actions.map((action) => (
+        <Pressable
+          key={action.key}
+          onPress={action.onPress}
+          style={[
+            styles.quickTile,
+            {
+              backgroundColor: colors.backgroundSecondary,
+              borderColor: colors.border,
+            },
+          ]}
+        >
+          <View style={[styles.quickIcon, { backgroundColor: `${action.accent}22` }]}>
+            <Ionicons name={action.icon} size={18} color={action.accent} />
+          </View>
+          <Text
+            style={[styles.quickLabel, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {action.label}
+          </Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   );
 }
 
 export function DashboardScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<DashboardNavigationProp>();
   const [commandSending, setCommandSending] = useState(false);
@@ -347,16 +247,16 @@ export function DashboardScreen() {
 
   const canSendCommands = user?.robot_command_access !== false;
   const siteRobots = siteDetails?.robots ?? [];
+  const siteTitle = selectedSite ? getSiteLabel(selectedSite) : "My Site";
 
-  const onlineRobots =
-    siteRobots.filter((r) => isRobotOnline(r.lora_state)).length;
+  const onlineRobots = siteRobots.filter((r) => isRobotOnline(r.lora_state)).length;
   const offlineRobots = siteRobots.length - onlineRobots;
   const onlineGateways =
     siteDetails?.gateways.filter(
       (gateway) => getGatewayStatusVariant(gateway.gateway_status) === "success",
     ).length ?? 0;
 
-  const avgBattery = (() => {
+  const avgBattery = useMemo(() => {
     if (!siteRobots.length) return null;
     const values = siteRobots
       .map((robot) => getBatteryPercent(robot.battery_voltage))
@@ -365,10 +265,8 @@ export function DashboardScreen() {
     return Math.round(
       values.reduce((sum, value) => sum + value, 0) / values.length,
     );
-  })();
+  }, [siteRobots]);
 
-  const siteTitle =
-    selectedSite?.site_name || selectedSite?.site_id || "My Site";
   const gatewayPreview =
     siteDetails?.gateways.slice(0, GATEWAY_PREVIEW_LIMIT) ?? [];
   const hiddenGateways =
@@ -387,14 +285,12 @@ export function DashboardScreen() {
     }
 
     setCommandSending(true);
-
     try {
       const result = await sendMqttMulticastDownlink("stop", {
         siteId: selectedSite.site_id,
         block: "All",
         robots: commandable,
       });
-
       appAlert(
         "Command sent",
         result.message ||
@@ -429,19 +325,111 @@ export function DashboardScreen() {
       }.`,
       [
         { text: "Cancel", style: "cancel" },
-        {
-          text: "Stop All",
-          onPress: () => void sendEmergencyStopAll(),
-        },
+        { text: "Stop All", onPress: () => void sendEmergencyStopAll() },
       ],
     );
   };
 
+  const openBlockwise = () => {
+    if (!selectedSite?.site_id) return;
+    navigation.navigate("Blockwise", {
+      siteId: selectedSite.site_id,
+      siteName: getSiteLabel(selectedSite),
+    });
+  };
+
+  const openCleaningLog = () => {
+    if (!selectedSite?.site_id) return;
+    navigation.navigate("CleaningLogs", {
+      screen: "SiteCleaningLogs",
+      params: {
+        siteId: selectedSite.site_id,
+        siteName: getSiteLabel(selectedSite),
+      },
+    });
+  };
+
+  const quickActions = useMemo<QuickAction[]>(() => {
+    const items: QuickAction[] = [
+      {
+        key: "blocks",
+        label: "Blocks",
+        icon: "grid-outline",
+        accent: "#4F7CFF",
+        onPress: openBlockwise,
+      },
+      {
+        key: "logs",
+        label: "Logs",
+        icon: "list-outline",
+        accent: "#00C9A7",
+        onPress: openCleaningLog,
+      },
+      {
+        key: "tracking",
+        label: "Tracking",
+        icon: "navigate-outline",
+        accent: "#F59E0B",
+        onPress: () =>
+          navigation.navigate("RobotTracking", {
+            siteId: selectedSite?.site_id,
+            siteName: selectedSite ? getSiteLabel(selectedSite) : undefined,
+          }),
+      },
+      {
+        key: "robots",
+        label: "Robots",
+        icon: "hardware-chip-outline",
+        accent: "#8B5CF6",
+        onPress: () => navigation.navigate("Robots"),
+      },
+      {
+        key: "gateways",
+        label: "Gateways",
+        icon: "wifi-outline",
+        accent: "#3B82F6",
+        onPress: () => navigation.navigate("Gateways"),
+      },
+    ];
+    if (canAccessAnalytics(user?.role)) {
+      items.push({
+        key: "analytics",
+        label: "Analytics",
+        icon: "bar-chart-outline",
+        accent: "#E11D48",
+        onPress: () => navigation.navigate("Analytics"),
+      });
+    }
+    if (canAccessClientTickets(user?.role)) {
+      items.push({
+        key: "tickets",
+        label: "Tickets",
+        icon: "ticket-outline",
+        accent: "#0EA5E9",
+        onPress: () => navigation.navigate("ClientTickets"),
+      });
+    }
+    if (canAccessPreventiveMaintenance(user?.role)) {
+      items.push({
+        key: "pm",
+        label: "PM",
+        icon: "build-outline",
+        accent: "#14B8A6",
+        onPress: () => navigation.navigate("PreventiveMaintenance"),
+      });
+    }
+    return items;
+  }, [navigation, selectedSite, user?.role]);
+
+  const heroColors: [string, string] = isDark
+    ? ["#12203F", "#1B2C55"]
+    : ["#0F766E", "#14B8A6"];
+
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <Navbar
-        title="Dashboard"
-        subtitle={`Welcome, ${user?.username ?? "Technician"}`}
+        title="Home"
+        subtitle={selectedSite ? getSiteLabel(selectedSite) : "Dashboard"}
       />
 
       <Screen
@@ -478,8 +466,56 @@ export function DashboardScreen() {
           </View>
         ) : (
           <>
-            {assignedSites.length > 0 ? (
-              <View style={styles.sitePickerRow}>
+            <LinearGradient
+              colors={heroColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.hero}
+            >
+              <Text style={styles.heroHello}>
+                {greetingFor(user?.username ?? "there")}
+              </Text>
+              <Text style={styles.heroSite} numberOfLines={1}>
+                {siteTitle}
+              </Text>
+              {siteDetails ? (
+                <Text style={styles.heroMeta}>
+                  {onlineRobots}/{siteRobots.length} robots online
+                  {siteDetails.cleaning
+                    ? ` · ${siteDetails.cleaning.completed} cleaned today`
+                    : ""}
+                </Text>
+              ) : null}
+              <View style={styles.heroActions}>
+                <Pressable
+                  onPress={openBlockwise}
+                  style={styles.heroPrimaryBtn}
+                >
+                  <Text style={styles.heroPrimaryText}>View blocks</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#042F2E" />
+                </Pressable>
+                <Pressable
+                  onPress={openEmergencyStopConfirm}
+                  disabled={!canSendCommands || commandSending}
+                  style={[
+                    styles.heroStopBtn,
+                    { opacity: canSendCommands ? 1 : 0.45 },
+                  ]}
+                >
+                  <Ionicons name="stop" size={12} color="#FECACA" />
+                  <Text style={styles.heroStopText}>
+                    {commandSending ? "Sending…" : "Stop all"}
+                  </Text>
+                </Pressable>
+              </View>
+            </LinearGradient>
+
+            {assignedSites.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.sitePickerRow}
+              >
                 {assignedSites.map((site) => {
                   const active = site.site_id === selectedSite?.site_id;
                   return (
@@ -496,6 +532,11 @@ export function DashboardScreen() {
                         },
                       ]}
                     >
+                      <Ionicons
+                        name="location"
+                        size={11}
+                        color={active ? "#101936" : colors.textMuted}
+                      />
                       <Text
                         style={[
                           styles.siteChipText,
@@ -503,27 +544,17 @@ export function DashboardScreen() {
                         ]}
                         numberOfLines={1}
                       >
-                        {site.site_name || site.site_id}
+                        {getSiteLabel(site)}
                       </Text>
                     </Pressable>
                   );
                 })}
-              </View>
+              </ScrollView>
             ) : null}
-
-            {/* <View style={styles.siteHeader}>
-              <Text style={[styles.siteTitle, { color: colors.textPrimary }]}>
-                {siteTitle}
-              </Text>
-              {selectedSite?.site_id ? (
-                <Badge label={selectedSite.site_id} variant="info" size="sm" />
-              ) : null}
-            </View> */}
 
             {loading ? (
               <View style={styles.centerState}>
                 <ActivityIndicator size="large" color={colors.primary} />
-               
               </View>
             ) : error ? (
               <View
@@ -539,75 +570,101 @@ export function DashboardScreen() {
                 <Text style={[styles.messageTitle, { color: colors.danger }]}>
                   Could not load site data
                 </Text>
-                <Text
-                  style={[styles.messageText, { color: colors.textSecondary }]}
-                >
+                <Text style={[styles.messageText, { color: colors.textSecondary }]}>
                   {error}
                 </Text>
               </View>
             ) : siteDetails ? (
               <>
-                <TopSummaryCards
-                  totalRobots={siteDetails.robots.length}
-                  onlineRobots={onlineRobots}
-                  offlineRobots={offlineRobots}
-                  totalGateways={siteDetails.gateways.length}
-                  onlineGateways={onlineGateways}
-                  cleaning={siteDetails.cleaning}
-                  onBlockwise={() => {
-                    if (!selectedSite?.site_id) return;
-                    navigation.navigate("Blockwise", {
-                      siteId: selectedSite.site_id,
-                      siteName: selectedSite.site_name,
-                    });
-                  }}
-                  onCleaningLog={() => {
-                    if (!selectedSite?.site_id) return;
-                    navigation.navigate("CleaningLogs", {
-                      screen: "SiteCleaningLogs",
-                      params: {
-                        siteId: selectedSite.site_id,
-                        siteName: selectedSite.site_name,
-                      },
-                    });
-                  }}
-                  onEmergencyStop={openEmergencyStopConfirm}
-                  commandSending={commandSending}
-                  canSendCommands={canSendCommands}
-                />
-                {!canSendCommands ? (
-                  <Text
-                    style={[styles.commandAccessHint, { color: colors.textMuted }]}
-                  >
-                    Robot command access is disabled for your account.
-                  </Text>
-                ) : null}
-                {siteDetails.weather &&
-                Object.keys(siteDetails.weather).length > 0 ? (
+                {hasUsableWeather(siteDetails.weather) ? (
                   <WeatherCard weather={siteDetails.weather} />
                 ) : null}
+
+                <View style={styles.kpiGrid}>
+                  <KpiTile
+                    icon="hardware-chip-outline"
+                    label="Robots"
+                    value={`${onlineRobots}/${siteDetails.robots.length}`}
+                    hint={`${offlineRobots} offline`}
+                    accent={colors.primary}
+                  />
+                  <KpiTile
+                    icon="sparkles-outline"
+                    label="Cleaning"
+                    value={siteDetails.cleaning.completed}
+                    hint=""
+                    accent={colors.primary}
+                    valueColor={colors.primary}
+                    hintNode={
+                      <Text style={styles.kpiHint} numberOfLines={1}>
+                        <Text style={{ color: colors.badge.warning.text }}>
+                          {siteDetails.cleaning.inprogress} running
+                        </Text>
+                        <Text style={{ color: colors.textMuted }}> · </Text>
+                        <Text style={{ color: colors.danger }}>
+                          {siteDetails.cleaning.failure} failed
+                        </Text>
+                      </Text>
+                    }
+                  />
+                  <KpiTile
+                    icon="wifi-outline"
+                    label="Gateways"
+                    value={`${onlineGateways}/${siteDetails.gateways.length}`}
+                    hint="online now"
+                    accent={colors.badge.info.text}
+                  />
+                  <KpiTile
+                    icon="battery-charging-outline"
+                    label="Battery"
+                    value={avgBattery != null ? `${avgBattery}%` : "—"}
+                    hint="site average"
+                    accent="#8B5CF6"
+                  />
+                </View>
+
+                <QuickActions actions={quickActions} />
+
                 <GatewayMapCard
                   gateways={siteDetails.gateways}
                   robots={siteDetails.robots}
                 />
 
-                <SectionCard
-                  title={`Robots (${siteDetails.robots.length})`}
-                  // subtitle="Summary only — open Robots tab for the full searchable list"
+                <SectionHeader
+                  eyebrow="Fleet"
+                  title="Robot health"
+                  actionLabel="See all"
+                  onAction={() => navigation.navigate("Robots")}
+                />
+                <View
+                  style={[
+                    styles.panel,
+                    {
+                      backgroundColor: colors.backgroundSecondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
                 >
-                  <RobotBatterySummary
-                    robots={siteDetails.robots}
-                    onViewAll={() => navigation.navigate("Robots")}
-                  />
-                </SectionCard>
+                  <RobotBatterySummary robots={siteDetails.robots} />
+                </View>
 
-                <SectionCard
-                  title={`Gateways (${siteDetails.gateways.length})`}
+                <SectionHeader
+                  eyebrow="Network"
+                  title="Gateways"
+                  actionLabel="See all"
+                  onAction={() => navigation.navigate("Gateways")}
+                />
+                <View
+                  style={[
+                    styles.panel,
+                    {
+                      backgroundColor: colors.backgroundSecondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
                 >
                   {siteDetails.gateways.length === 0 ? (
-                    <Text
-                      style={[styles.emptyText, { color: colors.textMuted }]}
-                    >
+                    <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                       No gateways found for this site.
                     </Text>
                   ) : (
@@ -622,18 +679,13 @@ export function DashboardScreen() {
                         >
                           <View style={styles.listRowTop}>
                             <Text
-                              style={[
-                                styles.listTitle,
-                                { color: colors.textPrimary },
-                              ]}
+                              style={[styles.listTitle, { color: colors.textPrimary }]}
                             >
                               {gateway.gateway_name ||
                                 gateway.gateway_name_in_lns_server}
                             </Text>
                             <Badge
-                              label={getGatewayStatusLabel(
-                                gateway.gateway_status,
-                              )}
+                              label={getGatewayStatusLabel(gateway.gateway_status)}
                               variant={getGatewayStatusVariant(
                                 gateway.gateway_status,
                               )}
@@ -641,42 +693,39 @@ export function DashboardScreen() {
                             />
                           </View>
                           <Text
-                            style={[
-                              styles.listMeta,
-                              { color: colors.textSecondary },
-                            ]}
+                            style={[styles.listMeta, { color: colors.textSecondary }]}
                           >
                             Robots: {gateway.robot_count ?? 0}
                             {gateway.battery_voltage != null
                               ? ` · Battery ${gateway.battery_voltage}%`
                               : ""}
                           </Text>
-                          <Text
-                            style={[
-                              styles.listMeta,
-                              { color: colors.textMuted },
-                            ]}
-                          >
+                          <Text style={[styles.listMeta, { color: colors.textMuted }]}>
                             Last uplink: {formatUplink(gateway.last_uplink)}
                           </Text>
                         </View>
                       ))}
                       {hiddenGateways > 0 ? (
-                        <Text
-                          style={[styles.moreText, { color: colors.textMuted }]}
-                        >
+                        <Text style={[styles.moreText, { color: colors.textMuted }]}>
                           +{hiddenGateways} more gateways
                         </Text>
                       ) : null}
                     </>
                   )}
-                </SectionCard>
+                </View>
 
-                <SectionCard title="Block-wise Cleaning">
+                <SectionHeader eyebrow="Today" title="Block-wise cleaning" />
+                <View
+                  style={[
+                    styles.panel,
+                    {
+                      backgroundColor: colors.backgroundSecondary,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
                   {siteDetails.blockWiseCleaning.length === 0 ? (
-                    <Text
-                      style={[styles.emptyText, { color: colors.textMuted }]}
-                    >
+                    <Text style={[styles.emptyText, { color: colors.textMuted }]}>
                       No block cleaning data available.
                     </Text>
                   ) : (
@@ -690,10 +739,7 @@ export function DashboardScreen() {
                       >
                         <View style={styles.listRowTop}>
                           <Text
-                            style={[
-                              styles.listTitle,
-                              { color: colors.textPrimary },
-                            ]}
+                            style={[styles.listTitle, { color: colors.textPrimary }]}
                           >
                             Block {block.block}
                           </Text>
@@ -704,17 +750,14 @@ export function DashboardScreen() {
                           />
                         </View>
                         <Text
-                          style={[
-                            styles.listMeta,
-                            { color: colors.textSecondary },
-                          ]}
+                          style={[styles.listMeta, { color: colors.textSecondary }]}
                         >
                           Area cleaned: {block.areaCleaned} m²
                         </Text>
                       </View>
                     ))
                   )}
-                </SectionCard>
+                </View>
               </>
             ) : null}
           </>
@@ -725,179 +768,176 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
+  wrapper: { flex: 1 },
+  hero: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+    gap: 6,
+  },
+  heroHello: {
+    ...typography.caption,
+    color: "rgba(255,255,255,0.78)",
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
+  },
+  heroSite: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  heroMeta: {
+    ...typography.bodySmall,
+    color: "rgba(255,255,255,0.82)",
+  },
+  heroActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  heroPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#5EEAD4",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  heroPrimaryText: {
+    ...typography.label,
+    color: "#042F2E",
+    fontWeight: "800",
+  },
+  heroStopBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "rgba(254,202,202,0.45)",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
+  heroStopText: {
+    ...typography.caption,
+    color: "#FECACA",
+    fontWeight: "700",
   },
   sitePickerRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    flexWrap: "wrap",
     gap: spacing.xs,
-    margin: spacing.md,
+    paddingBottom: spacing.md,
   },
   siteChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    maxWidth: "100%",
+    paddingVertical: 6,
+    maxWidth: 180,
   },
   siteChipText: {
     ...typography.caption,
     fontWeight: "600",
   },
-  topCardsStack: {
+  kpiGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  topCard: {
-    width: "100%",
+  kpiTile: {
+    minWidth: "47%",
+    flex: 1,
     borderWidth: 1,
     borderRadius: radius.md,
-    padding: spacing.sm,
-    gap: spacing.xs,
+    padding: spacing.md,
+    gap: 4,
   },
-  topCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  topCardHeaderActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  stopAllBtn: {
-    flex: 0,
-    flexDirection: "row",
-    minHeight: 22,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    gap: 2,
-  },
-  topCardTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  topCardTitle: {
-    ...typography.caption,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  topCardAction: {
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  topCardActionText: {
-    ...typography.caption,
-    fontSize: 10,
-    fontWeight: "700",
-  },
-  summaryMetricsRow: {
-    flexDirection: "row",
-    gap: spacing.xs,
-  },
-  summaryMetric: {
-    flex: 1,
-    minHeight: 48,
-    borderWidth: 1,
-    borderRadius: radius.sm,
+  kpiIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xs,
+    marginBottom: 2,
   },
-  summaryMetricLabel: {
+  kpiLabel: {
     ...typography.caption,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
     textTransform: "uppercase",
   },
-  summaryMetricValue: {
-    fontSize: 18,
-    lineHeight: 22,
+  kpiValue: {
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: "800",
   },
-  gatewayStatusRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    marginTop: 2,
-  },
-  gatewayOnlineValue: {
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: "800",
-  },
-  gatewayTotalText: {
-    ...typography.bodySmall,
-    marginLeft: 3,
-    fontWeight: "600",
-  },
-  gatewayTrack: {
-    height: 5,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-  },
-  gatewayFill: {
-    height: "100%",
-    borderRadius: radius.pill,
-  },
-  siteHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  siteTitle: {
-    ...typography.h3,
-    flex: 1,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  statCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  statValue: {
-    ...typography.h3,
-  },
-  statLabel: {
-    textAlign: "center",
+  kpiHint: {
     ...typography.caption,
+    fontSize: 11,
+    fontWeight: "500",
   },
-  sectionCard: {
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  sectionHeaderCopy: { flex: 1 },
+  sectionEyebrow: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  sectionHeading: {
+    ...typography.h3,
+    fontSize: 16,
+  },
+  sectionAction: {
+    ...typography.caption,
+    fontWeight: "700",
+  },
+  quickRow: {
+    gap: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  quickTile: {
+    width: 84,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    alignItems: "center",
+    gap: 6,
+  },
+  quickIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickLabel: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  panel: {
     borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    ...typography.h3,
-  },
-  sectionSubtitle: {
-    ...typography.caption,
-    marginTop: spacing.xs,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
   },
   listRow: {
     paddingVertical: spacing.sm,
@@ -943,14 +983,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: spacing.xxl,
-    gap: spacing.sm,
-  },
-  stateText: {
-    ...typography.bodySmall,
-  },
-  commandAccessHint: {
-    ...typography.caption,
-    marginBottom: spacing.md,
-    textAlign: "center",
   },
 });

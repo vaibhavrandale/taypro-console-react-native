@@ -16,8 +16,6 @@ import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { appAlert } from '../../utils/appAlert';
-import { formatDateTimeIST } from '../../utils/datetime';
-import { isRobotOnline } from '../../utils/robot';
 import {
   formatSeconds,
   getCleaningPercentage,
@@ -87,8 +85,6 @@ export function RobotTrackingDetailModal({
 
   const tone = badgeTone(phaseInfo.badgeColor);
   const cleaning = robot.cleaning || {};
-  const online = isRobotOnline(robot.lora_state);
-  const lastUplink = formatDateTimeIST(robot.last_uplink);
 
   const sendCommand = async (payload: string, label: string) => {
     if (!robot.deveui) {
@@ -150,42 +146,11 @@ export function RobotTrackingDetailModal({
           <View style={styles.handle} />
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
-              <View style={styles.titleRow}>
-                <Text style={[styles.title, { color: colors.textPrimary }]}>
-                  {robot.robot_no}
-                </Text>
-                <View
-                  style={[
-                    styles.statusPill,
-                    {
-                      backgroundColor: online
-                        ? 'rgba(34,197,94,.15)'
-                        : 'rgba(239,68,68,.15)',
-                    },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.statusDot,
-                      { backgroundColor: online ? '#22c55e' : '#ef4444' },
-                    ]}
-                  />
-                  <Text
-                    style={{
-                      color: online ? '#22c55e' : '#ef4444',
-                      fontSize: 11,
-                      fontWeight: '700',
-                    }}
-                  >
-                    {online ? 'ONLINE' : 'OFFLINE'}
-                  </Text>
-                </View>
-              </View>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
+                {robot.robot_no}
+              </Text>
               <Text style={{ color: colors.textMuted, fontSize: 12 }}>
                 {robot.block || '—'} · {robot.site_id}
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 2 }}>
-                Last uplink: {lastUplink}
               </Text>
             </View>
             <View style={[styles.badge, { backgroundColor: tone.bg }]}>
@@ -289,8 +254,6 @@ export function RobotTrackingDetailModal({
                 Robot info
               </Text>
               {[
-                ['Status', online ? 'Online' : 'Offline'],
-                ['Last uplink', lastUplink],
                 ['DevEUI', robot.deveui || '—'],
                 ['LoRa No', String(robot.lora_no ?? '—')],
                 ['Row', String(robot.row_no ?? '—')],
@@ -301,13 +264,7 @@ export function RobotTrackingDetailModal({
                   <Text style={{ color: colors.textMuted }}>{label}</Text>
                   <Text
                     style={{
-                      color:
-                        label === 'Status'
-                          ? online
-                            ? '#22c55e'
-                            : '#ef4444'
-                          : colors.textPrimary,
-                      fontWeight: label === 'Status' ? '700' : '400',
+                      color: colors.textPrimary,
                       flexShrink: 1,
                       textAlign: 'right',
                     }}
@@ -394,28 +351,9 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     gap: 8,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
   title: {
     ...typography.h3,
     fontWeight: '700',
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
   },
   badge: {
     paddingHorizontal: 8,

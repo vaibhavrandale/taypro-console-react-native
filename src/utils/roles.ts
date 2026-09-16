@@ -32,6 +32,16 @@ const EXPENSE_READ_ONLY_USER_ROLES = new Set([
   "Project User",
 ]);
 
+/** Pricing, My Subscription, and yellow subscription gems — Client Admin only. */
+export function canAccessSubscriptionPages(role?: string): boolean {
+  return role === "Client Admin";
+}
+
+/** Analytics / Statistics — Client Admin only (web /client-admin/statistics). */
+export function canAccessAnalytics(role?: string): boolean {
+  return role === "Client Admin";
+}
+
 export function canAccessAttendance(role?: string): boolean {
   return role != null && ATTENDANCE_ROLES.has(role);
 }
@@ -40,9 +50,29 @@ export function canSubmitDpr(role?: string): boolean {
   return canAccessAttendance(role);
 }
 
-/** Site / Opex technicians can open the PM dashboard. */
+/** Site / Opex technicians and Client Admin can open the PM dashboard. */
 export function canAccessPreventiveMaintenance(role?: string): boolean {
+  return canAccessAttendance(role) || role === "Client Admin";
+}
+
+/** Client Admin may view PM records only — no create/edit. */
+export function canMutatePreventiveMaintenance(role?: string): boolean {
   return canAccessAttendance(role);
+}
+
+/** Client Tickets (support tickets) — Client Admin only. */
+export function canAccessClientTickets(role?: string): boolean {
+  return role === "Client Admin";
+}
+
+/** Manage external users — Client Admin only (web /client-admin/external-users). */
+export function canManageExternalUsers(role?: string): boolean {
+  return role === "Client Admin";
+}
+
+/** Client Admin has no service-ticket feature. */
+export function canAccessServiceTickets(role?: string): boolean {
+  return role != null && role !== "Client Admin";
 }
 
 /** Service Inventory sidebar entry — Site Technician only. */

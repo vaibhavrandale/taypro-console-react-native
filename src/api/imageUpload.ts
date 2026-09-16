@@ -107,10 +107,20 @@ export async function uploadUserImage(localUri: string): Promise<string> {
   return uploadImageToPath(localUri, '/image-upload/user-images');
 }
 
+export async function uploadClientLogo(localUri: string): Promise<string> {
+  return uploadImageToPath(localUri, '/image-upload/client-logo');
+}
+
 export async function uploadServiceTicketImage(
   localUri: string,
 ): Promise<string> {
   return uploadImageToPath(localUri, '/image-upload/service-tickets');
+}
+
+export async function uploadClientTicketImage(
+  localUri: string,
+): Promise<string> {
+  return uploadImageToPath(localUri, '/image-upload/client-tickets');
 }
 
 export async function uploadPreventiveMaintenanceImage(

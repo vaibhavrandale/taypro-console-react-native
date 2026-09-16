@@ -56,7 +56,7 @@ export function Logo({
   return (
     <View
       style={[
-        styles.wrap,
+        rounded && styles.wrap,
         { width: dimension, height: dimension },
         rounded && { borderRadius: dimension * 0.22 },
         style,

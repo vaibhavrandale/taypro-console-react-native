@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,7 +11,11 @@ import { ProfileScreen } from "../screens/ProfileScreen";
 import { AttendanceStack } from "./AttendanceStack";
 import { DprStack, type DprStackParamList } from "./DprStack";
 import { SitesStack, type SitesStackParamList } from "./SitesStack";
-import { canAccessAttendance, canSubmitDpr } from "../utils/roles";
+import {
+  canAccessAttendance,
+  canAccessSubscriptionPages,
+  canSubmitDpr,
+} from "../utils/roles";
 import type { AttendanceStackParamList } from "./types";
 
 export type MainTabParamList = {
@@ -31,6 +35,7 @@ export function MainTabs() {
   const tabBarHeight = 52 + Math.max(insets.bottom, 6);
   const showAttendance = canAccessAttendance(user?.role);
   const showDpr = canSubmitDpr(user?.role);
+  const showSubscriptionBadge = canAccessSubscriptionPages(user?.role);
 
   return (
     <Tab.Navigator
@@ -71,7 +76,17 @@ export function MainTabs() {
         options={{
           tabBarLabel: "Logs",
           tabBarIcon: ({ color }) => (
-            <Ionicons name="list-outline" size={20} color={color} />
+            <View>
+              <Ionicons name="list-outline" size={20} color={color} />
+              {showSubscriptionBadge ? (
+                <Ionicons
+                  name="diamond"
+                  size={8}
+                  color="#FACC15"
+                  style={{ position: "absolute", top: -3, right: -7 }}
+                />
+              ) : null}
+            </View>
           ),
         }}
       />

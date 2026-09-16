@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { fetchSiteDetails } from '../api/siteDetails';
+import { fetchClientWeather } from '../api/weather';
 import { useAuth } from './AuthContext';
 import { AssignedSite } from '../types/auth';
 import { SiteDetails } from '../types/siteDetails';
@@ -72,6 +73,14 @@ export function SiteDetailsProvider({ children }: { children: React.ReactNode })
 
     try {
       const data = await fetchSiteDetails(siteId);
+      try {
+        const weather = await fetchClientWeather(siteId);
+        if (weather) {
+          data.weather = weather;
+        }
+      } catch {
+        // Keep site-details weather if the client weather API fails.
+      }
       setSiteDetails(data);
     } catch (err) {
       setSiteDetails(null);

@@ -187,7 +187,7 @@ export function UsersScreen() {
   return (
     <Screen>
       <Navbar
-        title="Users"
+        title="Voice Call"
         subtitle="Call works even if they are offline but have the app"
       />
       {!webrtcReady ? (

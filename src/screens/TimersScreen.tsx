@@ -17,6 +17,7 @@ import { TimerCard } from '../components/timers/TimerCard';
 import { TimerDetailModal } from '../components/timers/TimerDetailModal';
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { Button, Input } from '../components/ui';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import {
   bulkToggleTimerPermission,
   fetchTimers,
@@ -31,6 +32,7 @@ import {
   canBulkToggleTimers,
   canEditTimer,
 } from '../utils/roles';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import type { TimersStackParamList } from '../navigation/TimersStack';
 
 type Navigation = NativeStackNavigationProp<TimersStackParamList, 'TimersList'>;
@@ -59,7 +61,7 @@ export function TimersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
   const [viewTimer, setViewTimer] = useState<BlockTimer | null>(null);
   const [blockSearch, setBlockSearch] = useState('');
 
@@ -115,7 +117,7 @@ export function TimersScreen() {
         setSelectedIds(new Set());
       } catch (err) {
         setTimers([]);
-        setError(err instanceof Error ? err.message : 'Failed to load timers');
+        setError(asLoadError(err, 'Failed to load timers'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -298,28 +300,20 @@ export function TimersScreen() {
       ) : null}
 
       {error ? (
-        <View
-          style={[
-            styles.errorBox,
-            {
-              backgroundColor: colors.badge.error.bg,
-              borderColor: colors.danger,
-            },
-          ]}
-        >
-          <Text style={[styles.errorText, { color: colors.danger }]}>
-            {error}
-          </Text>
-          <Button
-            title="Retry"
-            size="sm"
-            variant="outline"
-            onPress={() => void loadTimers()}
-          />
-        </View>
+        <ScreenError error={error} onRetry={() => void loadTimers()} />
       ) : null}
     </View>
   );
+
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage
+        title="Timers"
+        subtitle="Block cleaning schedules"
+        error={error}
+      />
+    );
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>

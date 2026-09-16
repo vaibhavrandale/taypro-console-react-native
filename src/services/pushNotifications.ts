@@ -5,6 +5,9 @@ import { registerPushToken, unregisterPushToken } from '../api/voiceCalls';
 export const CALL_CHANNEL_ID = 'calls';
 export const ALERTS_CHANNEL_ID = 'alerts';
 export const TIMER_ALERT_IDENTIFIER = 'timer-execution-alert';
+export const CALL_CATEGORY_ID = 'incomingcall';
+export const CALL_ACTION_ACCEPT = 'acceptcall';
+export const CALL_ACTION_DECLINE = 'declinecall';
 
 export type AlertNotificationType = 'custom_notification' | 'timer_execution';
 
@@ -13,6 +16,7 @@ type NotificationsModule = typeof import('expo-notifications');
 let notifications: NotificationsModule | null | undefined;
 let handlerSet = false;
 let cachedToken: string | null = null;
+let callChannelEnsured = false;
 
 /**
  * Lazily load expo-notifications. Builds made before this module was added have
@@ -82,12 +86,16 @@ function ensureForegroundHandler(mod: NotificationsModule) {
         const isCall = callIdFromData(data) != null;
         const inForeground = AppState.currentState === 'active';
         return {
-          shouldPlaySound: true,
+          shouldPlaySound: !isCall || !inForeground,
           shouldSetBadge: false,
-          // Calls always heads-up. Alerts heads-up only when the app is not open
-          // so they still land in the system tray via shouldShowList.
-          shouldShowBanner: isCall || !inForeground,
+          // In-app call modal already covers foreground ringing. Heads-up
+          // only when the app is not on screen so a locked / backgrounded
+          // phone still alerts.
+          shouldShowBanner: !inForeground,
           shouldShowList: true,
+          ...(isCall && !inForeground
+            ? { priority: mod.AndroidNotificationPriority.MAX }
+            : {}),
         };
       },
     });
@@ -99,14 +107,50 @@ function ensureForegroundHandler(mod: NotificationsModule) {
 
 async function ensureCallChannel(mod: NotificationsModule) {
   if (Platform.OS !== 'android') return;
+  if (callChannelEnsured) return;
+  try {
+    await mod.deleteNotificationChannelAsync(CALL_CHANNEL_ID);
+  } catch {
+    // first run, or channel already gone
+  }
   await mod.setNotificationChannelAsync(CALL_CHANNEL_ID, {
     name: 'Incoming calls',
     importance: mod.AndroidImportance.MAX,
     sound: 'default',
-    vibrationPattern: [0, 800, 700, 800],
+    vibrationPattern: [0, 800, 700, 800, 700, 800],
     bypassDnd: true,
+    enableVibrate: true,
+    enableLights: true,
     lockscreenVisibility: mod.AndroidNotificationVisibility.PUBLIC,
+    audioAttributes: {
+      usage: mod.AndroidAudioUsage.NOTIFICATION_RINGTONE,
+      contentType: mod.AndroidAudioContentType.SONIFICATION,
+      flags: {
+        enforceAudibility: true,
+        requestHardwareAudioVideoSynchronization: false,
+      },
+    },
   });
+  callChannelEnsured = true;
+}
+
+async function ensureCallCategory(mod: NotificationsModule) {
+  try {
+    await mod.setNotificationCategoryAsync(CALL_CATEGORY_ID, [
+      {
+        identifier: CALL_ACTION_ACCEPT,
+        buttonTitle: 'Accept',
+        options: { opensAppToForeground: true },
+      },
+      {
+        identifier: CALL_ACTION_DECLINE,
+        buttonTitle: 'Decline',
+        options: { opensAppToForeground: false, isDestructive: true },
+      },
+    ]);
+  } catch {
+    // categories unavailable on this build
+  }
 }
 
 async function ensureAlertChannel(mod: NotificationsModule) {
@@ -145,6 +189,7 @@ export async function ensureAlertNotificationsReady(): Promise<boolean> {
     ensureForegroundHandler(mod);
     await ensureCallChannel(mod);
     await ensureAlertChannel(mod);
+    await ensureCallCategory(mod);
     return await ensurePermission(mod);
   } catch {
     return false;
@@ -183,6 +228,66 @@ export async function unregisterCallPushAsync(): Promise<void> {
     // best effort on sign-out
   }
   cachedToken = null;
+}
+
+export async function presentIncomingCallNotification(opts: {
+  callId: string;
+  callerName: string;
+}): Promise<void> {
+  const mod = loadNotifications();
+  if (!mod) return;
+
+  try {
+    ensureForegroundHandler(mod);
+    await ensureCallChannel(mod);
+    await ensureCallCategory(mod);
+    await mod.scheduleNotificationAsync({
+      identifier: `incomingcall_${opts.callId}`,
+      content: {
+        title: 'Incoming call',
+        body: `${opts.callerName} is calling you`,
+        sound: Platform.OS === 'ios' ? 'defaultRingtone' : 'default',
+        categoryIdentifier: CALL_CATEGORY_ID,
+        interruptionLevel: 'timeSensitive',
+        sticky: true,
+        autoDismiss: false,
+        data: { type: 'incoming_call', callId: opts.callId },
+        ...(Platform.OS === 'android'
+          ? {
+              channelId: CALL_CHANNEL_ID,
+              priority: 'max',
+              vibrate: [0, 800, 700, 800, 700, 800],
+            }
+          : {}),
+      },
+      trigger: null,
+    });
+  } catch {
+    // ignore — lock-screen ring simply won't show
+  }
+}
+
+export async function dismissIncomingCallNotifications(
+  callId?: string,
+): Promise<void> {
+  const mod = loadNotifications();
+  if (!mod) return;
+  try {
+    if (callId) {
+      await mod.dismissNotificationAsync(`incomingcall_${callId}`);
+    }
+    const presented = await mod.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter((item) => {
+          const id = callIdFromData(item.request.content.data);
+          return id != null && (!callId || id === callId);
+        })
+        .map((item) => mod.dismissNotificationAsync(item.request.identifier)),
+    );
+  } catch {
+    // already gone
+  }
 }
 
 export async function presentAlertNotification(opts: {
@@ -262,13 +367,29 @@ export async function consumeLaunchAlertType(
 }
 
 export function addCallNotificationResponseListener(
-  handler: (callId: string) => void,
+  handler: (callId: string, actionIdentifier: string) => void,
 ): () => void {
   const mod = loadNotifications();
   if (!mod) return () => undefined;
   try {
     const sub = mod.addNotificationResponseReceivedListener((response) => {
       const id = callIdFromData(response.notification.request.content.data);
+      if (id) handler(id, response.actionIdentifier);
+    });
+    return () => sub.remove();
+  } catch {
+    return () => undefined;
+  }
+}
+
+export function addCallNotificationReceivedListener(
+  handler: (callId: string) => void,
+): () => void {
+  const mod = loadNotifications();
+  if (!mod) return () => undefined;
+  try {
+    const sub = mod.addNotificationReceivedListener((notification) => {
+      const id = callIdFromData(notification.request.content.data);
       if (id) handler(id);
     });
     return () => sub.remove();

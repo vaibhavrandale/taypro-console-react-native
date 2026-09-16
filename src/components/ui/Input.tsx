@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +21,29 @@ type Props = TextInputProps & {
   inputRef?: React.RefObject<TextInput | null>;
 };
 
+const WEB_AUTOFILL_STYLE_ID = 'nectyr-autofill-override';
+
+function syncWebAutofillColors(background: string, color: string) {
+  if (Platform.OS !== 'web') return;
+  let el = document.getElementById(WEB_AUTOFILL_STYLE_ID);
+  if (!el) {
+    el = document.createElement('style');
+    el.id = WEB_AUTOFILL_STYLE_ID;
+    document.head.appendChild(el);
+  }
+  el.textContent = `
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: ${color} !important;
+  caret-color: ${color};
+  box-shadow: 0 0 0 1000px ${background} inset !important;
+  transition: background-color 99999s ease-out 0s;
+}
+`;
+}
+
 export function Input({
   label,
   error,
@@ -34,6 +58,10 @@ export function Input({
   const { colors } = useTheme();
   const [showPassword, setShowPassword] = useState(false);
   const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    syncWebAutofillColors(colors.inputBackground, colors.textPrimary);
+  }, [colors.inputBackground, colors.textPrimary]);
 
   return (
     <View style={styles.wrapper}>

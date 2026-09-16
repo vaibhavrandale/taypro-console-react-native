@@ -14,14 +14,13 @@ import { useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Navbar } from '../components/layout';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { SolarPanelRow } from '../components/robotTracking/SolarPanelRow';
 import { RobotLocationsMapModal } from '../components/robotTracking/RobotLocationsMapModal';
 import { RobotTrackingDetailModal } from '../components/robotTracking/RobotTrackingDetailModal';
-import {
-  fetchRobotTrackingBySiteAndDate,
-  RobotTrackingApiError,
-} from '../api/robotTracking';
+import { fetchRobotTrackingBySiteAndDate } from '../api/robotTracking';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useAuth } from '../context/AuthContext';
 import { getSocket } from '../lib/socket';
 import type { DrawerParamList } from '../navigation/types';
@@ -70,7 +69,7 @@ export function RobotTrackingScreen() {
   const [robots, setRobots] = useState<RobotTracking[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
   const [selected, setSelected] = useState<RobotTracking | null>(null);
   const [showMap, setShowMap] = useState(false);
 
@@ -171,13 +170,7 @@ export function RobotTrackingScreen() {
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
         setRobots([]);
-        if (err instanceof RobotTrackingApiError) {
-          setError(err.message);
-        } else {
-          setError(
-            err instanceof Error ? err.message : 'Failed to load tracking',
-          );
-        }
+        setError(asLoadError(err, 'Failed to load tracking'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -253,6 +246,12 @@ export function RobotTrackingScreen() {
     d.setDate(d.getDate() + delta);
     setDate(d.toISOString().split('T')[0]);
   };
+
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage title="Robot Tracking" error={error} />
+    );
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -412,17 +411,7 @@ export function RobotTrackingScreen() {
             <ActivityIndicator color={colors.primary} />
           </View>
         ) : error ? (
-          <View style={styles.center}>
-            <Text style={{ color: colors.danger, textAlign: 'center', paddingHorizontal: 24 }}>
-              {error}
-            </Text>
-            <Pressable
-              onPress={() => void loadTracking()}
-              style={[styles.retry, { borderColor: colors.primary }]}
-            >
-              <Text style={{ color: colors.primary, fontWeight: '700' }}>Retry</Text>
-            </Pressable>
-          </View>
+          <ScreenError error={error} onRetry={() => void loadTracking()} />
         ) : (
           <FlatList
             data={filteredRobots}

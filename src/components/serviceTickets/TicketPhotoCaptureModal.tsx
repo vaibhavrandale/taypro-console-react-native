@@ -23,6 +23,7 @@ type Props = {
   title: string;
   onClose: () => void;
   onUploaded: (imageUrl: string) => Promise<void> | void;
+  uploadImage?: (localUri: string) => Promise<string>;
 };
 
 export function TicketPhotoCaptureModal({
@@ -30,6 +31,7 @@ export function TicketPhotoCaptureModal({
   title,
   onClose,
   onUploaded,
+  uploadImage = uploadServiceTicketImage,
 }: Props) {
   const { colors } = useTheme();
   const cameraRef = useRef<CameraView>(null);
@@ -68,7 +70,7 @@ export function TicketPhotoCaptureModal({
     if (!capturedUri) return;
     setUploading(true);
     try {
-      const imageUrl = await uploadServiceTicketImage(capturedUri);
+      const imageUrl = await uploadImage(capturedUri);
       await onUploaded(imageUrl);
       handleClose();
     } catch (err) {
@@ -79,7 +81,7 @@ export function TicketPhotoCaptureModal({
     } finally {
       setUploading(false);
     }
-  }, [capturedUri, onUploaded, handleClose]);
+  }, [capturedUri, onUploaded, handleClose, uploadImage]);
 
   if (!visible) return null;
 

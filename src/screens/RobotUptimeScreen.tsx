@@ -19,6 +19,8 @@ import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { UptimeSummaryHero } from '../components/robotUptime/UptimeSummaryHero';
 import { UptimeTrendChart } from '../components/robotUptime/UptimeTrendChart';
 import { fetchRobotUptime } from '../api/robotUptime';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
@@ -99,7 +101,7 @@ export function RobotUptimeScreen() {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
   const [filter, setFilter] = useState<FilterKey>('all');
   const [loadingSeconds, setLoadingSeconds] = useState(0);
 
@@ -280,7 +282,7 @@ export function RobotUptimeScreen() {
         if (!cached) {
           setDays([]);
         }
-        setError(err instanceof Error ? err.message : 'Failed to load uptime');
+        setError(asLoadError(err, 'Failed to load uptime'));
       } finally {
         if (requestId === requestIdRef.current) {
           setLoading(false);
@@ -421,22 +423,10 @@ export function RobotUptimeScreen() {
   ) : null;
 
   const errorContent = !loading && error ? (
-    <View style={styles.inlineEmpty}>
-      <Ionicons name="alert-circle-outline" size={32} color={colors.danger} />
-      <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-      <Pressable
-        onPress={() => siteId && void loadUptime(siteId)}
-        style={[
-          styles.retryButton,
-          {
-            backgroundColor: colors.backgroundTertiary,
-            borderColor: colors.border,
-          },
-        ]}
-      >
-        <Text style={[styles.retryText, { color: colors.primary }]}>Retry</Text>
-      </Pressable>
-    </View>
+    <ScreenError
+      error={error}
+      onRetry={() => siteId && void loadUptime(siteId)}
+    />
   ) : null;
 
   const loadingContent =
@@ -463,6 +453,16 @@ export function RobotUptimeScreen() {
         </View>
       </View>
     ) : null;
+
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage
+        title="Robot Uptime"
+        subtitle="Monthly cleaning & availability"
+        error={error}
+      />
+    );
+  }
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>

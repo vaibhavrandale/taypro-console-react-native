@@ -16,7 +16,8 @@
       "infoPlist": {
         "UIViewControllerBasedStatusBarAppearance": true,
         "UIBackgroundModes": [
-          "location"
+          "location",
+          "remote-notification"
         ],
         "NSMicrophoneUsageDescription": "Allow Nectyr to use your microphone for voice calls with other console users."
       }
@@ -33,6 +34,8 @@
         "android.permission.WAKE_LOCK",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS",
+        "android.permission.USE_FULL_SCREEN_INTENT",
+        "android.permission.TURN_SCREEN_ON",
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.BLUETOOTH",
@@ -86,10 +89,12 @@
         {
           "icon": "./assets/favicon.png",
           "color": "#1A2547",
-          "defaultChannel": "calls"
+          "defaultChannel": "calls",
+          "enableBackgroundRemoteNotifications": true
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withTransparentAutofillHighlight"
     ],
     "extra": {
       "eas": {

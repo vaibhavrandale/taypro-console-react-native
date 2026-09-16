@@ -11,7 +11,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Badge, Button } from '../ui';
 import { PmImageLightbox } from './PmImageLightbox';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../theme';
+import { canMutatePreventiveMaintenance } from '../../utils/roles';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
 import { formatDateTimeIST } from '../../utils/datetime';
@@ -135,7 +137,9 @@ function CheckSection({
 
 export function PmRobotCard({ record }: Props) {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
+  const canMutate = canMutatePreventiveMaintenance(user?.role);
   const [showActivity, setShowActivity] = useState(false);
   const [lightbox, setLightbox] = useState<{
     images: { src: string; label: string }[];
@@ -214,13 +218,15 @@ export function PmRobotCard({ record }: Props) {
               </Text>
             ) : null}
           </View>
-          <Button
-            title="Edit"
-            size="sm"
-            variant="outline"
-            icon="create-outline"
-            onPress={() => navigation.navigate('PmUpdate', { id: record._id })}
-          />
+          {canMutate ? (
+            <Button
+              title="Edit"
+              size="sm"
+              variant="outline"
+              icon="create-outline"
+              onPress={() => navigation.navigate('PmUpdate', { id: record._id })}
+            />
+          ) : null}
         </View>
 
         <CheckSection

@@ -10,6 +10,7 @@ type Props = {
   images: Array<string | undefined>;
   onCapture: (index: number) => void;
   onRemove: (index: number) => void;
+  emptyHint?: string;
 };
 
 export function TicketPhotoSlots({
@@ -17,6 +18,7 @@ export function TicketPhotoSlots({
   images,
   onCapture,
   onRemove,
+  emptyHint = 'Photo',
 }: Props) {
   const { colors } = useTheme();
 
@@ -63,7 +65,7 @@ export function TicketPhotoSlots({
                   color={colors.textMuted}
                 />
                 <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                  Photo {index + 1}
+                  {emptyHint} {index + 1}
                 </Text>
               </View>
             )}

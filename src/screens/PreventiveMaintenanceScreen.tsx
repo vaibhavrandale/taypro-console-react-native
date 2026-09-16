@@ -18,7 +18,10 @@ import { PmRobotCard } from '../components/pm/PmRobotCard';
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { Navbar } from '../components/layout';
 import { Button } from '../components/ui';
+import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { fetchPreventiveMaintenances } from '../api/preventiveMaintenance';
+import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
+import { canMutatePreventiveMaintenance } from '../utils/roles';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
@@ -53,6 +56,7 @@ export function PreventiveMaintenanceScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
+  const canMutate = canMutatePreventiveMaintenance(user?.role);
 
   const assignedSites = useMemo(
     () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
@@ -84,7 +88,7 @@ export function PreventiveMaintenanceScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<string | SubscriptionError>('');
 
   const robots = useMemo(() => flattenPmRobots(result), [result]);
 
@@ -115,11 +119,7 @@ export function PreventiveMaintenanceScreen() {
         setResult(data);
       } catch (err) {
         setResult(null);
-        setError(
-          err instanceof Error
-            ? err.message
-            : 'Failed to load preventive maintenance',
-        );
+        setError(asLoadError(err, 'Failed to load preventive maintenance'));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -178,12 +178,14 @@ export function PreventiveMaintenanceScreen() {
         <Text style={[styles.docLine, { color: colors.textMuted, flex: 1 }]}>
           Doc No: TPL-12 · Rev: 1 · Revised by: Abhay Singh
         </Text>
-        <Button
-          title="New"
-          size="sm"
-          icon="add-outline"
-          onPress={() => navigation.navigate('PmCreate')}
-        />
+        {canMutate ? (
+          <Button
+            title="New"
+            size="sm"
+            icon="add-outline"
+            onPress={() => navigation.navigate('PmCreate')}
+          />
+        ) : null}
       </View>
 
       <View
@@ -333,26 +335,20 @@ export function PreventiveMaintenanceScreen() {
       </View>
 
       {error ? (
-        <View
-          style={[
-            styles.errorBox,
-            {
-              backgroundColor: colors.badge.error.bg,
-              borderColor: colors.danger,
-            },
-          ]}
-        >
-          <Text style={{ color: colors.danger }}>{error}</Text>
-          <Button
-            title="Retry"
-            size="sm"
-            variant="outline"
-            onPress={() => void load()}
-          />
-        </View>
+        <ScreenError error={error} onRetry={() => void load()} />
       ) : null}
     </View>
   );
+
+  if (isSubscriptionError(error)) {
+    return (
+      <SubscriptionBlockedPage
+        title="Preventive Maintenance"
+        subtitle="Quarterly checklist records"
+        error={error}
+      />
+    );
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>

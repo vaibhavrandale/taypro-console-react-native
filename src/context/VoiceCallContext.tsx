@@ -30,10 +30,14 @@ import {
   subscribeAudioLevels,
 } from '../services/webrtcVoice';
 import {
+  addCallNotificationReceivedListener,
   addCallNotificationResponseListener,
+  CALL_ACTION_ACCEPT,
+  CALL_ACTION_DECLINE,
   consumeLaunchCallId,
+  dismissIncomingCallNotifications,
+  presentIncomingCallNotification,
   registerForCallPushAsync,
-  unregisterCallPushAsync,
 } from '../services/pushNotifications';
 import type { CallSignalPayload, VoiceCall } from '../types/voiceCall';
 
@@ -132,6 +136,8 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   const resetLocal = useCallback(() => {
     Vibration.cancel();
+    const callId = callRef.current?._id;
+    if (callId) void dismissIncomingCallNotifications(String(callId));
     leaveVoiceChannel();
     setMutedState(false);
     setSpeakerState(true);
@@ -145,6 +151,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const finishCall = useCallback(
     (next: VoiceCall) => {
       Vibration.cancel();
+      void dismissIncomingCallNotifications(String(next._id));
       leaveVoiceChannel();
       setCall(next);
       setPhase('ended');
@@ -197,16 +204,22 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   // live call:incoming event, so pull the call and show it if still ringing.
   const resumeIncomingCall = useCallback(
     async (callId: string) => {
-      if (phaseRef.current !== 'idle') return;
+      if (phaseRef.current !== 'idle' && phaseRef.current !== 'incoming') {
+        return null;
+      }
       try {
         const fresh = await fetchVoiceCall(callId);
-        if (fresh.status !== 'ringing') return;
-        if (String(fresh.callee_id) !== String(userIdRef.current || '')) return;
+        if (fresh.status !== 'ringing') return null;
+        if (String(fresh.callee_id) !== String(userIdRef.current || '')) {
+          return null;
+        }
+        callRef.current = fresh;
         setCall(fresh);
         setPhase('incoming');
         setError(null);
+        return fresh;
       } catch {
-        // call likely already ended/missed; ignore
+        return null;
       }
     },
     [],
@@ -221,6 +234,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     try {
       setPhase('connecting');
       const updated = await acceptVoiceCall(current._id);
+      void dismissIncomingCallNotifications(String(current._id));
       setCall(updated);
       // Wait for caller's WebRTC offer via call:signal
     } catch (err) {
@@ -299,6 +313,11 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       if (AppState.currentState === 'active') {
         Vibration.vibrate([0, 800, 700], true);
+      } else {
+        void presentIncomingCallNotification({
+          callId: String(payload._id),
+          callerName: payload.caller_snapshot?.username || 'Someone',
+        });
       }
     };
 
@@ -453,11 +472,34 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     void consumeLaunchCallId().then((callId) => {
       if (callId) void resumeIncomingCall(callId);
     });
-    const unsubscribe = addCallNotificationResponseListener((callId) => {
+    const unsubResponse = addCallNotificationResponseListener(
+      (callId, action) => {
+        if (action === CALL_ACTION_DECLINE) {
+          void (async () => {
+            try {
+              const updated = await rejectVoiceCall(callId);
+              finishCall(updated);
+            } catch {
+              void dismissIncomingCallNotifications(callId);
+            }
+          })();
+          return;
+        }
+        void resumeIncomingCall(callId).then((fresh) => {
+          if (fresh && action === CALL_ACTION_ACCEPT) {
+            void accept();
+          }
+        });
+      },
+    );
+    const unsubReceived = addCallNotificationReceivedListener((callId) => {
       void resumeIncomingCall(callId);
     });
-    return unsubscribe;
-  }, [isAuthenticated, resumeIncomingCall, user?._id]);
+    return () => {
+      unsubResponse();
+      unsubReceived();
+    };
+  }, [accept, finishCall, isAuthenticated, resumeIncomingCall, user?._id]);
 
   useEffect(() => {
     if (phase === 'idle' || phase === 'ended' || phase === 'incoming') {

@@ -19,6 +19,7 @@ import { MainTabs } from './MainTabs';
 import { SitesStack } from './SitesStack';
 import { TimersStack } from './TimersStack';
 import { ServiceTicketsStack } from './ServiceTicketsStack';
+import { ClientTicketsStack } from './ClientTicketsStack';
 import { PreventiveMaintenanceStack } from './PreventiveMaintenanceStack';
 import { ExpenseClaimsStack } from './ExpenseClaimsStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
@@ -37,12 +38,28 @@ import { CustomNotificationModal } from '../components/notifications/CustomNotif
 import { TimerExecutionNotificationModal } from '../components/notifications/TimerExecutionNotificationModal';
 import { DummyScreen } from '../screens/DummyScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { AboutScreen } from '../screens/AboutScreen';
+import { PricingScreen } from '../screens/PricingScreen';
+import { MySubscriptionScreen } from '../screens/MySubscriptionScreen';
+import { AnalyticsStack } from './AnalyticsStack';
+import { ExternalUsersStack } from './ExternalUsersStack';
+import {
+  canAccessAnalytics,
+  canAccessClientTickets,
+  canAccessServiceTickets,
+  canManageExternalUsers,
+} from '../utils/roles';
 
 const AuthStack = createNativeStackNavigator();
 const Drawer = createDrawerNavigator();
 
 function MainDrawer() {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const showServiceTickets = canAccessServiceTickets(user?.role);
+  const showClientTickets = canAccessClientTickets(user?.role);
+  const showAnalytics = canAccessAnalytics(user?.role);
+  const showExternalUsers = canManageExternalUsers(user?.role);
 
   return (
     <>
@@ -98,9 +115,32 @@ function MainDrawer() {
         component={RobotTrackingScreen}
         options={{ title: 'Robot Tracking' }}
       />
+      {showAnalytics ? (
+        <Drawer.Screen
+          name="Analytics"
+          component={AnalyticsStack}
+          options={{ title: 'Analytics' }}
+        />
+      ) : null}
       <Drawer.Screen name="Timers" component={TimersStack} />
-      <Drawer.Screen name="Users" component={UsersScreen} options={{ title: 'Users' }} />
-      <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
+      <Drawer.Screen name="Users" component={UsersScreen} options={{ title: 'Voice Call' }} />
+      {showExternalUsers ? (
+        <Drawer.Screen
+          name="ExternalUsers"
+          component={ExternalUsersStack}
+          options={{ title: 'Manage Users' }}
+        />
+      ) : null}
+      {showServiceTickets ? (
+        <Drawer.Screen name="ServiceTickets" component={ServiceTicketsStack} />
+      ) : null}
+      {showClientTickets ? (
+        <Drawer.Screen
+          name="ClientTickets"
+          component={ClientTicketsStack}
+          options={{ title: 'Client Tickets' }}
+        />
+      ) : null}
       <Drawer.Screen
         name="ServiceInventory"
         component={ServiceInventoryScreen}
@@ -125,6 +165,21 @@ function MainDrawer() {
           />
         )}
       </Drawer.Screen>
+      <Drawer.Screen
+        name="About"
+        component={AboutScreen}
+        options={{ title: 'About' }}
+      />
+      <Drawer.Screen
+        name="Pricing"
+        component={PricingScreen}
+        options={{ title: 'Pricing' }}
+      />
+      <Drawer.Screen
+        name="MySubscription"
+        component={MySubscriptionScreen}
+        options={{ title: 'My Subscription' }}
+      />
       <Drawer.Screen
         name="Dummy"
         component={DummyScreen}
