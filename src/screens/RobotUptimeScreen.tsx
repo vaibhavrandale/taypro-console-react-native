@@ -22,6 +22,7 @@ import { fetchRobotUptime } from '../api/robotUptime';
 import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -82,13 +83,11 @@ export function RobotUptimeScreen() {
     });
   }, [navigation]);
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId({
+    initialSiteId,
+  });
 
   const initialMonth = getPreviousMonthYear();
-  const [siteId, setSiteId] = useState('');
   const [month, setMonth] = useState(initialMonth.month);
   const [year, setYear] = useState(initialMonth.year);
   const [days, setDays] = useState<RobotUptimeDay[]>([]);
@@ -111,21 +110,9 @@ export function RobotUptimeScreen() {
 
   useEffect(() => {
     if (assignedSites.length === 0) {
-      setSiteId('');
       setLoading(false);
-      return;
     }
-
-    setSiteId((current) => {
-      if (initialSiteId && assignedSites.some((site) => site.site_id === initialSiteId)) {
-        return initialSiteId;
-      }
-      if (current && assignedSites.some((site) => site.site_id === current)) {
-        return current;
-      }
-      return assignedSites[0].site_id;
-    });
-  }, [assignedSites, initialSiteId]);
+  }, [assignedSites.length]);
 
   const siteOptions = useMemo(
     () =>

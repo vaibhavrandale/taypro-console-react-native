@@ -94,7 +94,9 @@
         }
       ],
       "expo-sharing",
-      "./plugins/withTransparentAutofillHighlight"
+      "./plugins/withTransparentAutofillHighlight",
+      "./plugins/withUsbHost",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

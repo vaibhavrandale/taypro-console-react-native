@@ -19,7 +19,7 @@ import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { Navbar } from '../components/layout';
 import { Button } from '../components/ui';
 import { fetchAssignedSitesDpr } from '../api/technicianDpr';
-import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
@@ -98,17 +98,14 @@ function SummaryStrip({
 
 export function AssignedSitesDprScreen() {
   const { colors, isDark } = useTheme();
-  const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
   const bottomPad = useContentBottomPadding(spacing.xl);
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId({
+    allowAll: true,
+  });
 
   const initialRange = getCurrentMonthRange();
-  const [siteId, setSiteId] = useState('');
   const [startDate, setStartDate] = useState(initialRange.start_date);
   const [endDate, setEndDate] = useState(initialRange.end_date);
   const [records, setRecords] = useState<TechnicianDprRecord[]>([]);
@@ -122,18 +119,9 @@ export function AssignedSitesDprScreen() {
 
   useEffect(() => {
     if (assignedSites.length === 0) {
-      setSiteId('');
       setLoading(false);
-      return;
     }
-
-    setSiteId((current) => {
-      if (current && assignedSites.some((site) => site.site_id === current)) {
-        return current;
-      }
-      return assignedSites[0].site_id;
-    });
-  }, [assignedSites]);
+  }, [assignedSites.length]);
 
   const siteOptions = useMemo(() => {
     const options = assignedSites.map((site) => ({

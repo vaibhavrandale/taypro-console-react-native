@@ -19,7 +19,7 @@ import { TicketPhotoSlots } from '../components/serviceTickets/TicketPhotoSlots'
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { createClientTicket } from '../api/clientTickets';
 import { uploadClientTicketImage } from '../api/imageUpload';
-import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -39,14 +39,10 @@ function getSiteLabel(site: AssignedSite) {
 
 export function CreateClientTicketScreen() {
   const { colors } = useTheme();
-  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Navigation>();
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId();
 
   const siteOptions = useMemo(
     () =>
@@ -55,10 +51,6 @@ export function CreateClientTicketScreen() {
         label: getSiteLabel(site),
       })),
     [assignedSites],
-  );
-
-  const [siteId, setSiteId] = useState(
-    () => (assignedSites.length === 1 ? assignedSites[0].site_id : ''),
   );
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');

@@ -22,6 +22,7 @@ import { RobotTrackingDetailModal } from '../components/robotTracking/RobotTrack
 import { fetchRobotTrackingBySiteAndDate } from '../api/robotTracking';
 import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { getSocket } from '../lib/socket';
 import type { DrawerParamList } from '../navigation/types';
 import type { AssignedSite } from '../types/auth';
@@ -57,12 +58,10 @@ export function RobotTrackingScreen() {
   const route = useRoute<Route>();
   const initialSiteId = route.params?.siteId;
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId({
+    initialSiteId,
+  });
 
-  const [siteId, setSiteId] = useState('');
   const [date, setDate] = useState(todayIsoDate);
   const [block, setBlock] = useState('');
   const [search, setSearch] = useState('');
@@ -79,25 +78,6 @@ export function RobotTrackingScreen() {
   useEffect(() => {
     robotsRef.current = robots;
   }, [robots]);
-
-  useEffect(() => {
-    if (assignedSites.length === 0) {
-      setSiteId('');
-      return;
-    }
-    setSiteId((current) => {
-      if (
-        initialSiteId &&
-        assignedSites.some((site) => site.site_id === initialSiteId)
-      ) {
-        return initialSiteId;
-      }
-      if (current && assignedSites.some((site) => site.site_id === current)) {
-        return current;
-      }
-      return assignedSites[0].site_id;
-    });
-  }, [assignedSites, initialSiteId]);
 
   const siteOptions = useMemo(
     () =>

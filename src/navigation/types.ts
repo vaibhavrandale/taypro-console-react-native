@@ -59,6 +59,7 @@ export type DrawerParamList = {
   Analytics: NavigatorScreenParams<AnalyticsStackParamList> | undefined;
   RobotCommands: undefined;
   RobotActivity: undefined;
+  PcbLog: undefined;
   Timers: NavigatorScreenParams<TimersStackParamList> | undefined;
   Users: undefined;
   ExternalUsers: NavigatorScreenParams<ExternalUsersStackParamList> | undefined;

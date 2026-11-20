@@ -36,6 +36,7 @@ import {
   parseSiteCoordinateNumbers,
 } from "../api/siteCoordinates";
 import { useAuth } from "../context/AuthContext";
+import { usePersistedSiteId } from "../context/SiteDetailsContext";
 import { useLocationTracking } from "../context/LocationTrackingContext";
 import { requestBackgroundLocationForTracking } from "../services/technicianLocationTracking";
 import { requestAttendanceLocationPermissions } from "../utils/locationPermissions";
@@ -82,12 +83,7 @@ export function AttendanceScreen() {
     useNavigation<NativeStackNavigationProp<AttendanceStackParamList>>();
   const userId = user?._id ?? "";
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
-
-  const [selectedSiteId, setSelectedSiteId] = useState("");
+  const { assignedSites, siteId: selectedSiteId, setSiteId } = usePersistedSiteId();
   const [siteCoords, setSiteCoords] = useState<SiteCoordinates | null>(null);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [locationError, setLocationError] = useState("");
@@ -334,7 +330,6 @@ export function AttendanceScreen() {
   ]);
 
   useEffect(() => {
-    setSelectedSiteId(assignedSites[0]?.site_id ?? "");
     setPunchStatus(null);
     setSiteCoords(null);
     setStatusError("");
@@ -392,7 +387,7 @@ export function AttendanceScreen() {
   }, [refreshAll]);
 
   const handleSiteSelect = (siteId: string) => {
-    setSelectedSiteId(siteId);
+    setSiteId(siteId);
     void loadSiteCoordinates(siteId);
   };
 

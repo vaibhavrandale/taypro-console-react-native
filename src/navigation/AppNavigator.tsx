@@ -25,6 +25,7 @@ import { ExpenseClaimsStack } from './ExpenseClaimsStack';
 import { RobotsScreen } from '../screens/RobotsScreen';
 import { RobotActivityScreen } from '../screens/RobotActivityScreen';
 import { RobotCommandsScreen } from '../screens/RobotCommandsScreen';
+import { PcbLogScreen } from '../screens/PcbLogScreen';
 import { BlockwiseScreen } from '../screens/BlockwiseScreen';
 import { BlockManagementScreen } from '../screens/BlockManagementScreen';
 import { RobotOperatingScreen } from '../screens/RobotOperatingScreen';
@@ -86,6 +87,11 @@ function MainDrawer() {
         name="RobotActivity"
         component={RobotActivityScreen}
         options={{ title: 'Command Activity' }}
+      />
+      <Drawer.Screen
+        name="PcbLog"
+        component={PcbLogScreen}
+        options={{ title: 'PCB log' }}
       />
       <Drawer.Screen
         name="Blockwise"

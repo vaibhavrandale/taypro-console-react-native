@@ -23,6 +23,7 @@ import {
   fetchTimers,
 } from '../api/timers';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -48,14 +49,11 @@ export function TimersScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId({
+    allowAll: true,
+  });
 
   const showBulkToggle = canBulkToggleTimers(user?.role);
-
-  const [siteId, setSiteId] = useState('');
   const [timers, setTimers] = useState<BlockTimer[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -67,21 +65,9 @@ export function TimersScreen() {
 
   useEffect(() => {
     if (assignedSites.length === 0) {
-      setSiteId('');
       setLoading(false);
-      return;
     }
-
-    setSiteId((current) => {
-      if (
-        current === 'all' ||
-        (current && assignedSites.some((site) => site.site_id === current))
-      ) {
-        return current;
-      }
-      return assignedSites[0].site_id;
-    });
-  }, [assignedSites]);
+  }, [assignedSites.length]);
 
   const siteOptions = useMemo(() => {
     const options = assignedSites.map((site) => ({

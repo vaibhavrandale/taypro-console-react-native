@@ -96,6 +96,11 @@ const BASE_MENU_SECTIONS: MenuSection[] = [
         label: "Command Activity",
         icon: "hardware-chip-outline",
       },
+      {
+        name: "PcbLog",
+        label: "PCB log",
+        icon: "reader-outline",
+      },
       { name: "Timers", label: "Timers", icon: "timer-outline", subscription: true },
     ],
   },

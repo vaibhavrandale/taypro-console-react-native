@@ -25,6 +25,7 @@ import {
 } from '../api/technicianDpr';
 import { summarizeText } from '../api/openai';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -58,14 +59,9 @@ export function TechnicianDprScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<Navigation>();
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId();
 
-  const [form, setForm] = useState<DprFormState>(() =>
-    createEmptyDprForm(assignedSites[0]?.site_id ?? ''),
-  );
+  const [form, setForm] = useState<DprFormState>(() => createEmptyDprForm(''));
   const [breakdownReasons, setBreakdownReasons] = useState<BreakdownReason[]>(
     [],
   );
@@ -142,15 +138,17 @@ export function TechnicianDprScreen() {
       setBootLoading(false);
       return;
     }
-
-    setForm((prev) => {
-      if (prev.site_id && assignedSites.some((s) => s.site_id === prev.site_id)) {
-        return prev;
-      }
-      return { ...prev, site_id: assignedSites[0].site_id };
-    });
     void loadInitialData();
-  }, [assignedSites, loadInitialData]);
+  }, [assignedSites.length, loadInitialData]);
+
+  useEffect(() => {
+    if (!siteId) return;
+    setForm((prev) =>
+      prev.site_id === siteId
+        ? prev
+        : { ...prev, site_id: siteId, technician_present: [] },
+    );
+  }, [siteId]);
 
   useEffect(() => {
     if (!form.site_id) return;
@@ -416,13 +414,7 @@ export function TechnicianDprScreen() {
                 label="Site"
                 value={form.site_id}
                 options={siteOptions}
-                onChange={(value) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    site_id: String(value),
-                    technician_present: [],
-                  }))
-                }
+                onChange={(value) => setSiteId(String(value))}
                 icon="business-outline"
               />
             </View>

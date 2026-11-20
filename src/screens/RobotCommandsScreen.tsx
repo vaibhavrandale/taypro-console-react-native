@@ -18,6 +18,7 @@ import {
   sendMqttMulticastDownlink,
 } from '../api/robots';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useContentBottomPadding } from '../hooks/useContentBottomPadding';
 import type { AssignedSite } from '../types/auth';
 import type { RobotCommand } from '../types/robotOperating';
@@ -65,14 +66,10 @@ export function RobotCommandsScreen() {
   const { user } = useAuth();
   const bottomPad = useContentBottomPadding(spacing.xl);
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId();
 
   const canSendCommands = user?.robot_command_access !== false;
 
-  const [siteId, setSiteId] = useState('');
   const [search, setSearch] = useState('');
   const [robots, setRobots] = useState<BlockRobotSummary[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
@@ -89,12 +86,6 @@ export function RobotCommandsScreen() {
       })),
     [assignedSites],
   );
-
-  useEffect(() => {
-    if (!siteId && assignedSites[0]?.site_id) {
-      setSiteId(assignedSites[0].site_id);
-    }
-  }, [assignedSites, siteId]);
 
   const loadRobots = useCallback(
     async (isRefresh = false) => {

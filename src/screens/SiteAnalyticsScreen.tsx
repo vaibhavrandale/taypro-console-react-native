@@ -18,7 +18,7 @@ import { AnalyticsKpiCard } from '../components/analytics/AnalyticsKpiCard';
 import { UptimeSelectField } from '../components/robotUptime/UptimeSelectField';
 import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
 import { fetchSiteCleaningAnalytics } from '../api/robotAnalytics';
-import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -59,17 +59,12 @@ function cellValue(robot: SiteAnalyticsRobot, key: SortKey) {
 
 export function SiteAnalyticsScreen() {
   const { colors } = useTheme();
-  const { user } = useAuth();
   const navigation = useNavigation();
   const bottomPad = useContentBottomPadding(spacing.xxxl);
   const defaults = useMemo(() => last7AndToday(), []);
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId();
 
-  const [siteId, setSiteId] = useState(assignedSites[0]?.site_id ?? '');
   const [startDate, setStartDate] = useState(defaults.startDate);
   const [endDate, setEndDate] = useState(defaults.endDate);
   const [dateField, setDateField] = useState<DateField>(null);
@@ -82,7 +77,7 @@ export function SiteAnalyticsScreen() {
     total_cycles: 0,
     avg_cleaning_minutes: 0,
   });
-  const [loading, setLoading] = useState(Boolean(assignedSites[0]?.site_id));
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | SubscriptionError>('');
 

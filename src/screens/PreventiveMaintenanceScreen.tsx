@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,6 +23,7 @@ import { fetchPreventiveMaintenances } from '../api/preventiveMaintenance';
 import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { canMutatePreventiveMaintenance } from '../utils/roles';
 import { useAuth } from '../context/AuthContext';
+import { usePersistedSiteId } from '../context/SiteDetailsContext';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -58,10 +59,9 @@ export function PreventiveMaintenanceScreen() {
   const navigation = useNavigation<Navigation>();
   const canMutate = canMutatePreventiveMaintenance(user?.role);
 
-  const assignedSites = useMemo(
-    () => (user?.assigned_sites ?? []).filter((site) => site.site_id),
-    [user?.assigned_sites],
-  );
+  const { assignedSites, siteId, setSiteId } = usePersistedSiteId({
+    allowAll: true,
+  });
 
   const siteOptions = useMemo(() => {
     const options = assignedSites.map((site) => ({
@@ -75,9 +75,6 @@ export function PreventiveMaintenanceScreen() {
   }, [assignedSites]);
 
   const defaultRange = useMemo(() => getCurrentMonthRange(), []);
-  const [siteId, setSiteId] = useState(
-    () => (assignedSites.length === 1 ? assignedSites[0].site_id : 'all'),
-  );
   const [startDate, setStartDate] = useState(defaultRange.start_date);
   const [endDate, setEndDate] = useState(defaultRange.end_date);
   const [dateField, setDateField] = useState<DateField>(null);
@@ -133,12 +130,6 @@ export function PreventiveMaintenanceScreen() {
       void load();
     }, [load]),
   );
-
-  useEffect(() => {
-    if (assignedSites.length === 1) {
-      setSiteId(assignedSites[0].site_id);
-    }
-  }, [assignedSites]);
 
   const openDatePicker = (field: 'start' | 'end') => {
     setPickerDate(new Date(field === 'start' ? startDate : endDate));
