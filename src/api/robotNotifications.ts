@@ -74,6 +74,10 @@ function asNotification(value: unknown): RobotNotification | null {
   return {
     _id: id,
     robot_no: typeof value.robot_no === 'string' ? value.robot_no : undefined,
+    lora_no:
+      typeof value.lora_no === 'number' || typeof value.lora_no === 'string'
+        ? String(value.lora_no)
+        : undefined,
     command: typeof value.command === 'string' ? value.command : undefined,
     deveui: typeof value.deveui === 'string' ? value.deveui : undefined,
     site_id: typeof value.site_id === 'string' ? value.site_id : undefined,

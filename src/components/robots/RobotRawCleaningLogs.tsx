@@ -4,6 +4,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -11,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { fetchRawCleaningLogs } from '../../api/rawCleaningLogs';
-import { Badge } from '../ui';
+import { TableBadge, TableCell, TableHeader, TableRow, tableWidth } from '../ui';
 import type { BadgeVariant } from '../ui/Badge';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
@@ -25,6 +26,19 @@ import {
 } from '../../utils/datetime';
 
 const PAGE_LIMIT = 10;
+
+const LOG_COLS = [
+  { label: 'Sr No', width: 32 },
+  { label: 'Time', width: 96 },
+  { label: 'Topic', width: 88 },
+  { label: 'Data', width: 150 },
+  { label: 'RSSI', width: 42 },
+  { label: 'SNR', width: 40 },
+  { label: 'Gateway', width: 96 },
+  { label: 'Comments', width: 110 },
+] as const;
+
+const LOG_TABLE_WIDTH = tableWidth(LOG_COLS.map((column) => column.width));
 
 type Props = {
   robotNo: string;
@@ -45,82 +59,6 @@ function getTopicVariant(topic: string): BadgeVariant {
 function parseApiDate(value: string) {
   const date = new Date(`${value}T00:00:00`);
   return Number.isNaN(date.getTime()) ? new Date() : date;
-}
-
-function LogCard({ log }: { log: RawCleaningLog }) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.logCard,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <View style={styles.logHeader}>
-        <Badge label={log.topic} variant={getTopicVariant(log.topic)} size="sm" />
-        <Text style={[styles.logTime, { color: colors.textMuted }]}>
-          {formatDateTimeIST(log.createdAt)}
-        </Text>
-      </View>
-
-      <Text
-        style={[styles.dataText, { color: colors.textPrimary }]}
-        numberOfLines={3}
-      >
-        {log.data || '—'}
-      </Text>
-
-      {log.comments ? (
-        <Text style={[styles.commentsText, { color: colors.textSecondary }]}>
-          {log.comments}
-        </Text>
-      ) : null}
-
-      <View style={styles.logMetrics}>
-        <View style={styles.metricCell}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-            RSSI
-          </Text>
-          <Text style={[styles.metricValue, { color: colors.danger }]}>
-            {log.rssi || '—'}
-          </Text>
-        </View>
-        <View style={styles.metricCell}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-            SNR
-          </Text>
-          <Text style={[styles.metricValue, { color: colors.badge.warning.text }]}>
-            {log.snr || '—'}
-          </Text>
-        </View>
-        <View style={styles.metricCell}>
-          <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-            DevEUI
-          </Text>
-          <Text
-            style={[styles.metricValueSmall, { color: colors.textSecondary }]}
-            numberOfLines={1}
-          >
-            {log.deveui || '—'}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.logFooter}>
-        <Ionicons name="radio-outline" size={12} color={colors.textMuted} />
-        <Text
-          style={[styles.gatewayText, { color: colors.textSecondary }]}
-          numberOfLines={1}
-        >
-          {log.gateway_id || '—'}
-        </Text>
-      </View>
-    </View>
-  );
 }
 
 export function RobotRawCleaningLogs({ robotNo, active }: Props) {
@@ -371,11 +309,44 @@ export function RobotRawCleaningLogs({ robotNo, active }: Props) {
           </Text>
         </View>
       ) : (
-        <View style={styles.list}>
-          {logs.map((log) => (
-            <LogCard key={log._id} log={log} />
-          ))}
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ width: LOG_TABLE_WIDTH }}>
+            <TableHeader columns={[...LOG_COLS]} />
+            {logs.map((log, index) => (
+              <TableRow key={log._id} width={LOG_TABLE_WIDTH}>
+                <TableCell width={LOG_COLS[0].width}>
+                  {(page - 1) * PAGE_LIMIT + index + 1}
+                </TableCell>
+                <TableCell width={LOG_COLS[1].width} wrap>
+                  {formatDateTimeIST(log.createdAt)}
+                </TableCell>
+                <TableBadge
+                  width={LOG_COLS[2].width}
+                  label={log.topic || '—'}
+                  variant={getTopicVariant(log.topic)}
+                />
+                <TableCell width={LOG_COLS[3].width} wrap bold>
+                  {log.data || '—'}
+                </TableCell>
+                <TableCell width={LOG_COLS[4].width} color={colors.danger}>
+                  {log.rssi || '—'}
+                </TableCell>
+                <TableCell
+                  width={LOG_COLS[5].width}
+                  color={colors.badge.warning.text}
+                >
+                  {log.snr || '—'}
+                </TableCell>
+                <TableCell width={LOG_COLS[6].width} wrap>
+                  {log.gateway_id || '—'}
+                </TableCell>
+                <TableCell width={LOG_COLS[7].width} wrap>
+                  {log.comments || '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </View>
+        </ScrollView>
       )}
 
       <View style={styles.pagination}>

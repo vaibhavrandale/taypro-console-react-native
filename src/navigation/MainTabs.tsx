@@ -1,11 +1,13 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../theme";
+import { spacing } from "../theme/spacing";
 import { DashboardScreen } from "../screens/DashboardScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { AttendanceStack } from "./AttendanceStack";
@@ -28,36 +30,93 @@ export type MainTabParamList = {
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
-export function MainTabs() {
-  const { colors } = useTheme();
-  const { user } = useAuth();
+function BlinkTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = 52 + Math.max(insets.bottom, 6);
+  const inactive = isDark ? colors.textSecondary : "#1C1C1C";
+
+  return (
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: colors.navbar,
+          paddingBottom: Math.max(insets.bottom, 8),
+          ...Platform.select({
+            ios: {
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: -1 },
+              shadowOpacity: isDark ? 0.3 : 0.06,
+              shadowRadius: 6,
+            },
+            android: { elevation: 8 },
+            default: {
+              boxShadow: isDark
+                ? "0 -1px 6px rgba(0, 0, 0, 0.3)"
+                : "0 -1px 6px rgba(16, 25, 54, 0.06)",
+            },
+          }),
+        },
+      ]}
+    >
+      {state.routes.map((route, index) => {
+        const focused = state.index === index;
+        const { options } = descriptors[route.key];
+        const label =
+          typeof options.tabBarLabel === "string"
+            ? options.tabBarLabel
+            : (options.title ?? route.name);
+        const color = focused ? colors.primary : inactive;
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: "tabPress",
+            target: route.key,
+            canPreventDefault: true,
+          });
+          if (!focused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <Pressable
+            key={route.key}
+            accessibilityRole="tab"
+            accessibilityState={focused ? { selected: true } : {}}
+            accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+            onPress={onPress}
+            onLongPress={() =>
+              navigation.emit({ type: "tabLongPress", target: route.key })
+            }
+            style={styles.item}
+          >
+            {options.tabBarIcon?.({ focused, color, size: 22 })}
+            <Text
+              numberOfLines={1}
+              style={[styles.label, { color, fontWeight: focused ? "700" : "500" }]}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+export function MainTabs() {
+  const { user } = useAuth();
   const showAttendance = canAccessAttendance(user?.role);
   const showDpr = canSubmitDpr(user?.role);
   const showSubscriptionBadge = canAccessSubscriptionPages(user?.role);
 
   return (
     <Tab.Navigator
+      tabBar={(props) => <BlinkTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.navbar,
-          borderTopColor: colors.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          height: tabBarHeight,
-          paddingBottom: Math.max(insets.bottom, 6),
-          paddingTop: 6,
-        },
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: "600",
-        },
-        tabBarIconStyle: {
-          marginBottom: -2,
-        },
+        sceneStyle: { paddingBottom: spacing.xl },
       }}
     >
       <Tab.Screen
@@ -65,8 +124,8 @@ export function MainTabs() {
         component={DashboardScreen}
         options={{
           tabBarLabel: "Home",
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="grid-outline" size={20} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "home" : "home-outline"} size={22} color={color} />
           ),
         }}
       />
@@ -75,15 +134,19 @@ export function MainTabs() {
         component={SitesStack}
         options={{
           tabBarLabel: "Logs",
-          tabBarIcon: ({ color }) => (
+          tabBarIcon: ({ color, focused }) => (
             <View>
-              <Ionicons name="list-outline" size={20} color={color} />
+              <Ionicons
+                name={focused ? "list" : "list-outline"}
+                size={22}
+                color={color}
+              />
               {showSubscriptionBadge ? (
                 <Ionicons
                   name="diamond"
                   size={8}
                   color="#FACC15"
-                  style={{ position: "absolute", top: -3, right: -7 }}
+                  style={styles.badge}
                 />
               ) : null}
             </View>
@@ -96,8 +159,12 @@ export function MainTabs() {
           component={AttendanceStack}
           options={{
             tabBarLabel: "Attendance",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="finger-print-outline" size={20} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "finger-print" : "finger-print-outline"}
+                size={22}
+                color={color}
+              />
             ),
           }}
         />
@@ -108,8 +175,12 @@ export function MainTabs() {
           component={DprStack}
           options={{
             tabBarLabel: "DPR",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="document-text-outline" size={20} color={color} />
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? "document-text" : "document-text-outline"}
+                size={22}
+                color={color}
+              />
             ),
           }}
         />
@@ -119,11 +190,40 @@ export function MainTabs() {
         component={ProfileScreen}
         options={{
           tabBarLabel: "Profile",
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="person-circle-outline" size={20} color={color} />
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "person" : "person-outline"}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    paddingTop: 8,
+  },
+  item: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    minWidth: 0,
+    paddingHorizontal: 2,
+  },
+  label: {
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  badge: {
+    position: "absolute",
+    top: -3,
+    right: -7,
+  },
+});

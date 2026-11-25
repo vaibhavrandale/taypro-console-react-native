@@ -82,10 +82,7 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
     <View
       style={[
         styles.card,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
+        { backgroundColor: colors.backgroundSecondary },
       ]}
     >
       <View style={styles.header}>
@@ -106,7 +103,7 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
       <View
         style={[
           styles.mapWrap,
-          { borderColor: colors.border, backgroundColor: colors.backgroundTertiary },
+          { backgroundColor: colors.backgroundTertiary },
         ]}
       >
         {showMap ? (
@@ -129,7 +126,6 @@ export function GatewayMapCard({ gateways, robots = [] }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
@@ -149,8 +145,7 @@ const styles = StyleSheet.create({
   },
   mapWrap: {
     height: 260,
-    borderRadius: radius.sm,
-    borderWidth: 1,
+    borderRadius: radius.md,
     overflow: 'hidden',
     position: 'relative',
   },

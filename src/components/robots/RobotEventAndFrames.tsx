@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { fetchMqttEventLogs } from "../../api/mqttEventLogs";
-import { Badge } from "../ui";
+import { TableBadge, TableCell, TableHeader, TableRow, tableWidth } from "../ui";
 import { useAuth } from "../../context/AuthContext";
 import { getSocket } from "../../lib/socket";
 import { useTheme } from "../../theme";
@@ -29,6 +29,18 @@ import {
 } from "../../utils/robotPayloadDecoder";
 
 const MAX_FRAMES = 20;
+
+const FRAME_COLS = [
+  { label: "Sr No", width: 32 },
+  { label: "Time", width: 96 },
+  { label: "Topic", width: 72 },
+  { label: "Event", width: 140 },
+  { label: "DR", width: 36 },
+  { label: "FCnt", width: 44 },
+  { label: "Port", width: 40 },
+] as const;
+
+const FRAME_TABLE_WIDTH = tableWidth(FRAME_COLS.map((column) => column.width));
 
 type Props = {
   robotNo: string;
@@ -465,72 +477,57 @@ export function RobotEventAndFrames({ robotNo, deveui, active }: Props) {
           No frames yet...
         </Text>
       ) : (
-        <View style={styles.list}>
-          {frames.map((frame, index) => {
-            const payload = getFramePayload(frame);
-            const decoded = decodeRobotPayload(payload?.data);
-            const isUp = frame.topic?.endsWith("/up");
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ width: FRAME_TABLE_WIDTH }}>
+            <TableHeader columns={[...FRAME_COLS]} />
+            {frames.map((frame, index) => {
+              const payload = getFramePayload(frame);
+              const decoded = decodeRobotPayload(payload?.data);
+              const isUp = frame.topic?.endsWith("/up");
+              const eventLabel =
+                decoded.dynamic && decoded.value != null
+                  ? `${decoded.description} ${decoded.value}${decoded.unit ?? ""}`
+                  : decoded.description;
 
-            return (
-              <Pressable
-                key={frame._id ?? `${frame.topic}-${frame.createdAt}-${index}`}
-                onPress={() => {
-                  setSelectedFrame(frame);
-                  setDetailVisible(true);
-                }}
-                style={[
-                  styles.frameCard,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.frameTopRow}>
-                  <Text
-                    style={[styles.frameTime, { color: colors.textSecondary }]}
-                  >
+              return (
+                <TableRow
+                  key={frame._id ?? `${frame.topic}-${frame.createdAt}-${index}`}
+                  width={FRAME_TABLE_WIDTH}
+                  onPress={() => {
+                    setSelectedFrame(frame);
+                    setDetailVisible(true);
+                  }}
+                >
+                  <TableCell width={FRAME_COLS[0].width}>{index + 1}</TableCell>
+                  <TableCell width={FRAME_COLS[1].width} wrap>
                     {formatFrameTime(frame)}
-                  </Text>
-                  <Badge
+                  </TableCell>
+                  <TableBadge
+                    width={FRAME_COLS[2].width}
                     label={getTopicBadgeLabel(frame.topic)}
                     variant={getTopicBadgeVariant(frame.topic)}
-                    size="sm"
                   />
-                </View>
-
-                {isUp ? (
-                  <View style={styles.frameMetaRow}>
-                    <Badge
-                      label={
-                        decoded.dynamic && decoded.value != null
-                          ? `${decoded.description} ${decoded.value}${decoded.unit ?? ""}`
-                          : decoded.description
-                      }
-                      variant={getDecodedBadgeVariant(decoded.type)}
-                      size="sm"
-                    />
-                    <Text
-                      style={[styles.metaChip, { color: colors.textMuted }]}
-                    >
-                      DR {payload?.dr ?? "—"}
-                    </Text>
-                    <Text
-                      style={[styles.metaChip, { color: colors.textMuted }]}
-                    >
-                      FCnt {payload?.fCnt ?? "—"}
-                    </Text>
-                    <Text
-                      style={[styles.metaChip, { color: colors.textMuted }]}
-                    >
-                      fPort {payload?.fPort ?? "—"}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </View>
+                  <TableBadge
+                    width={FRAME_COLS[3].width}
+                    label={isUp ? eventLabel : "—"}
+                    variant={
+                      isUp ? getDecodedBadgeVariant(decoded.type) : "neutral"
+                    }
+                  />
+                  <TableCell width={FRAME_COLS[4].width}>
+                    {isUp ? (payload?.dr ?? "—") : "—"}
+                  </TableCell>
+                  <TableCell width={FRAME_COLS[5].width}>
+                    {isUp ? (payload?.fCnt ?? "—") : "—"}
+                  </TableCell>
+                  <TableCell width={FRAME_COLS[6].width}>
+                    {isUp ? (payload?.fPort ?? "—") : "—"}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </View>
+        </ScrollView>
       )}
 
       <FrameDetailModal

@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Image,
   Modal,
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -14,7 +14,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useNavigation } from '@react-navigation/native';
+import type { DrawerNavigationProp } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { DrawerParamList } from '../navigation/types';
 import { Navbar } from '../components/layout';
 import { Badge, Button } from '../components/ui';
 import { fetchRobotNotifications } from '../api/robotNotifications';
@@ -28,63 +31,65 @@ import { formatDisplayDate, toDateInputValue } from '../utils/dprHistory';
 
 const PAGE_LIMIT = 10;
 
-function stripHtml(html?: string) {
-  if (!html) return '';
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const COL = {
+  sr: 28,
+  user: 184,
+  robot: 148,
+  activity: 82,
+} as const;
+
+const TABLE_WIDTH = COL.sr + COL.user + COL.robot + COL.activity + 36;
 
 function commandMeta(command?: string): {
   label: string;
   variant: 'success' | 'error' | 'neutral' | 'info';
-  accent: string;
-  icon: keyof typeof Ionicons.glyphMap;
 } {
   if (command === '11' || command === 'Cleaning Start') {
-    return {
-      label: 'Cleaning Start',
-      variant: 'success',
-      accent: '#00C9A7',
-      icon: 'play-circle',
-    };
+    return { label: 'Cleaning Start', variant: 'success' };
+  }
+  if (command === '13') {
+    return { label: 'Intelligent Cleaning Start', variant: 'success' };
   }
   if (command === '14' || command === 'Cleaning Stop') {
-    return {
-      label: 'Cleaning Stop',
-      variant: 'error',
-      accent: '#EF4444',
-      icon: 'stop-circle',
-    };
+    return { label: 'Cleaning Stop', variant: 'error' };
   }
   if (command === '15') {
-    return {
-      label: 'Return To Dock',
-      variant: 'info',
-      accent: '#3B82F6',
-      icon: 'home',
-    };
+    return { label: 'Return To Dock', variant: 'info' };
   }
-  return {
-    label: command || 'Command',
-    variant: 'neutral',
-    accent: '#94A3B8',
-    icon: 'flash',
-  };
+  return { label: command || 'Command', variant: 'neutral' };
 }
 
-function truncateMiddle(value: string, max = 18) {
-  if (value.length <= max) return value;
-  const keep = Math.floor((max - 1) / 2);
-  return `${value.slice(0, keep)}…${value.slice(-keep)}`;
+function ActivityHeader() {
+  const { colors } = useTheme();
+  const labels = [
+    ['Sr No', COL.sr],
+    ['User', COL.user],
+    ['Robot', COL.robot],
+    ['Activity', COL.activity],
+  ] as const;
+  return (
+    <View
+      style={[
+        styles.headerRow,
+        {
+          backgroundColor: colors.backgroundTertiary,
+          borderBottomColor: colors.border,
+        },
+      ]}
+    >
+      {labels.map(([label, width]) => (
+        <Text
+          key={label}
+          style={[styles.headerCell, { width, color: colors.textMuted }]}
+        >
+          {label}
+        </Text>
+      ))}
+    </View>
+  );
 }
 
-function ActivityCard({
+function ActivityRow({
   item,
   index,
 }: {
@@ -92,114 +97,83 @@ function ActivityCard({
   index: number;
 }) {
   const { colors } = useTheme();
+  const navigation = useNavigation<DrawerNavigationProp<DrawerParamList>>();
   const command = commandMeta(item.command);
   const avatarUri = resolveProfileImageUri(item.last_activity?.profile_image);
-  const details = stripHtml(item.last_activity?.details);
+  const name = item.last_activity?.name || '—';
+  const email = item.last_activity?.email;
+  const [stampDate, stampTime = ''] = formatDateTimeIST(item.createdAt).split(', ');
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <View style={[styles.accentBar, { backgroundColor: command.accent }]} />
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardHeader}>
-          <View style={styles.headerLeft}>
-            <View
-              style={[
-                styles.commandIconWrap,
-                { backgroundColor: `${command.accent}22` },
-              ]}
-            >
-              <Ionicons name={command.icon} size={16} color={command.accent} />
-            </View>
-            <View style={styles.headerText}>
-              <Text style={[styles.robotNo, { color: colors.textPrimary }]}>
-                {item.robot_no || '—'}
-              </Text>
-              <Text style={[styles.indexLabel, { color: colors.textMuted }]}>
-                #{index}
-                {item.site_id ? ` · ${item.site_id}` : ''}
-              </Text>
-            </View>
-          </View>
-          <Badge label={command.label} variant={command.variant} size="sm" />
-        </View>
-
-        {item.deveui ? (
+    <View style={[styles.dataRow, { borderBottomColor: colors.border }]}>
+      <Text style={[styles.cell, { width: COL.sr, color: colors.textSecondary }]}>
+        {index}
+      </Text>
+      <View style={[styles.userCell, { width: COL.user }]}>
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.avatar} />
+        ) : (
           <View
             style={[
-              styles.chipRow,
+              styles.avatar,
+              styles.avatarFallback,
               { backgroundColor: colors.backgroundTertiary },
             ]}
           >
-            <Ionicons
-              name="radio-outline"
-              size={12}
-              color={colors.textMuted}
-            />
+            <Ionicons name="person" size={20} color={colors.textMuted} />
+          </View>
+        )}
+        <View style={styles.userText}>
+          <Text
+            style={[styles.userName, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
+            {name}
+          </Text>
+          {email ? (
             <Text
-              style={[styles.chipText, { color: colors.textMuted }]}
+              style={[styles.userEmail, { color: colors.textMuted }]}
               numberOfLines={1}
             >
-              {truncateMiddle(item.deveui, 22)}
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.senderRow}>
-          {avatarUri ? (
-            <Image source={{ uri: avatarUri }} style={styles.avatar} />
-          ) : (
-            <View
-              style={[
-                styles.avatarFallback,
-                { backgroundColor: colors.backgroundTertiary },
-              ]}
-            >
-              <Ionicons name="person" size={14} color={colors.textMuted} />
-            </View>
-          )}
-          <View style={styles.senderText}>
-            <Text style={[styles.senderName, { color: colors.textPrimary }]}>
-              {item.last_activity?.name || 'Unknown sender'}
-            </Text>
-            {item.last_activity?.email ? (
-              <Text
-                style={[styles.senderEmail, { color: colors.textMuted }]}
-                numberOfLines={1}
-              >
-                {item.last_activity.email}
-              </Text>
-            ) : null}
-          </View>
-          {item.createdAt ? (
-            <Text style={[styles.timestamp, { color: colors.textMuted }]}>
-              {formatDateTimeIST(item.createdAt)}
+              {email}
             </Text>
           ) : null}
-        </View>
-
-        {details ? (
-          <View
-            style={[
-              styles.detailsBox,
-              {
-                backgroundColor: colors.background,
-                borderColor: colors.border,
-              },
-            ]}
+          <Text
+            style={[styles.userEmail, { color: colors.textSecondary }]}
+            numberOfLines={1}
           >
-            <Text style={[styles.details, { color: colors.textSecondary }]}>
-              {details}
-            </Text>
-          </View>
+            {item.site_id || '—'}
+          </Text>
+        </View>
+      </View>
+      <View style={[styles.robotCell, { width: COL.robot }]}>
+        <Pressable
+          disabled={!item.robot_no}
+          onPress={() => {
+            if (!item.robot_no) return;
+            navigation.navigate('RobotOperating', {
+              robotNo: item.robot_no,
+              siteId: item.site_id ?? '',
+            });
+          }}
+        >
+          <Text style={[styles.cell, styles.robotLink, { color: colors.primary }]}>
+            {item.robot_no || '—'}
+          </Text>
+        </Pressable>
+        <Text style={[styles.loraText, { color: colors.textMuted }]}>
+          {item.lora_no ? `LoRa ${item.lora_no}` : '—'}
+        </Text>
+        <Badge label={command.label} variant={command.variant} size="sm" />
+      </View>
+      <View style={{ width: COL.activity }}>
+        <Text style={[styles.cell, { color: colors.textPrimary }]}>
+          {stampDate}
+        </Text>
+        {stampTime ? (
+          <Text style={[styles.loraText, { color: colors.textSecondary }]}>
+            {stampTime}
+          </Text>
         ) : null}
       </View>
     </View>
@@ -263,13 +237,13 @@ export function RobotActivityScreen() {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return items;
     return items.filter((item) => {
-      const details = stripHtml(item.last_activity?.details).toLowerCase();
       return (
         (item.robot_no ?? '').toLowerCase().includes(term) ||
+        (item.lora_no ?? '').toLowerCase().includes(term) ||
         (item.command ?? '').toLowerCase().includes(term) ||
+        commandMeta(item.command).label.toLowerCase().includes(term) ||
         (item.site_id ?? '').toLowerCase().includes(term) ||
-        (item.last_activity?.name ?? '').toLowerCase().includes(term) ||
-        details.includes(term)
+        (item.last_activity?.name ?? '').toLowerCase().includes(term)
       );
     });
   }, [items, searchTerm]);
@@ -320,6 +294,30 @@ export function RobotActivityScreen() {
             <Text style={[styles.dateValue, { color: colors.textPrimary }]}>
               {formatDisplayDate(startDate)}
             </Text>
+            {Platform.OS === 'web'
+              ? React.createElement('input', {
+                  type: 'date',
+                  value: startDate,
+                  max: today,
+                  'aria-label': 'Start date',
+                  onChange: (event: { target: { value: string } }) => {
+                    const next = event.target.value;
+                    if (!next) return;
+                    setStartDate(next);
+                    if (next > endDate) setEndDate(next);
+                    setPage(1);
+                  },
+                  style: {
+                    position: 'absolute',
+                    inset: 0,
+                    opacity: 0,
+                    width: '100%',
+                    height: '100%',
+                    cursor: 'pointer',
+                    border: 'none',
+                  },
+                })
+              : null}
           </Pressable>
           <Pressable
             onPress={() => openDatePicker('end')}
@@ -337,6 +335,30 @@ export function RobotActivityScreen() {
             <Text style={[styles.dateValue, { color: colors.textPrimary }]}>
               {formatDisplayDate(endDate)}
             </Text>
+            {Platform.OS === 'web'
+              ? React.createElement('input', {
+                  type: 'date',
+                  value: endDate,
+                  max: today,
+                  'aria-label': 'End date',
+                  onChange: (event: { target: { value: string } }) => {
+                    const next = event.target.value;
+                    if (!next) return;
+                    setEndDate(next);
+                    if (next < startDate) setStartDate(next);
+                    setPage(1);
+                  },
+                  style: {
+                    position: 'absolute',
+                    inset: 0,
+                    opacity: 0,
+                    width: '100%',
+                    height: '100%',
+                    cursor: 'pointer',
+                    border: 'none',
+                  },
+                })
+              : null}
           </Pressable>
         </View>
 
@@ -353,7 +375,7 @@ export function RobotActivityScreen() {
           <TextInput
             value={searchTerm}
             onChangeText={setSearchTerm}
-            placeholder="Search robot, command, site, sender..."
+            placeholder="Search robot, command, site, user..."
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.textPrimary }]}
           />
@@ -381,13 +403,9 @@ export function RobotActivityScreen() {
           <Button title="Retry" size="sm" onPress={() => void loadPage(page)} />
         </View>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={[
-            styles.list,
-            { paddingBottom: insets.bottom + spacing.xxl },
-          ]}
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -396,41 +414,45 @@ export function RobotActivityScreen() {
               colors={[colors.primary]}
             />
           }
-          ListEmptyComponent={
-            <View style={styles.centered}>
-              <Text style={{ color: colors.textMuted }}>
-                No robot activity found
-              </Text>
+        >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.table}>
+              <ActivityHeader />
+              {filtered.length === 0 ? (
+                <Text style={[styles.empty, { color: colors.textMuted }]}>
+                  No robot activity found
+                </Text>
+              ) : (
+                filtered.map((item, index) => (
+                  <ActivityRow
+                    key={item._id}
+                    item={item}
+                    index={(page - 1) * PAGE_LIMIT + index + 1}
+                  />
+                ))
+              )}
             </View>
-          }
-          renderItem={({ item, index }) => (
-            <ActivityCard
-              item={item}
-              index={(page - 1) * PAGE_LIMIT + index + 1}
+          </ScrollView>
+          <View style={styles.pager}>
+            <Button
+              title="Prev"
+              size="sm"
+              variant="outline"
+              disabled={!hasPrevPage || loading}
+              onPress={() => setPage((p) => Math.max(1, p - 1))}
             />
-          )}
-          ListFooterComponent={
-            <View style={styles.pager}>
-              <Button
-                title="Prev"
-                size="sm"
-                variant="outline"
-                disabled={!hasPrevPage || loading}
-                onPress={() => setPage((p) => Math.max(1, p - 1))}
-              />
-              <Text style={[styles.pageLabel, { color: colors.textMuted }]}>
-                Page {page} / {totalPages}
-              </Text>
-              <Button
-                title="Next"
-                size="sm"
-                variant="outline"
-                disabled={!hasNextPage || loading}
-                onPress={() => setPage((p) => p + 1)}
-              />
-            </View>
-          }
-        />
+            <Text style={[styles.pageLabel, { color: colors.textMuted }]}>
+              Page {page} / {totalPages}
+            </Text>
+            <Button
+              title="Next"
+              size="sm"
+              variant="outline"
+              disabled={!hasNextPage || loading}
+              onPress={() => setPage((p) => p + 1)}
+            />
+          </View>
+        </ScrollView>
       )}
 
       {datePicker && Platform.OS === 'android' ? (
@@ -505,6 +527,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     gap: 2,
+    position: 'relative',
   },
   dateLabel: { ...typography.caption, fontSize: 10 },
   dateValue: { ...typography.bodySmall, fontWeight: '600' },
@@ -522,9 +545,74 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     paddingVertical: spacing.sm,
   },
-  list: {
-    padding: spacing.md,
-    gap: spacing.sm,
+  listScroll: { flex: 1 },
+  table: {
+    width: TABLE_WIDTH,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  headerCell: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    textAlign: 'left',
+    lineHeight: 14,
+  },
+  dataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+  },
+  cell: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    textAlign: 'left',
+  },
+  userCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  userText: { flex: 1, gap: 1 },
+  userName: {
+    ...typography.bodySmall,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  userEmail: {
+    ...typography.caption,
+    fontSize: 11,
+  },
+  robotCell: {
+    gap: 2,
+    alignItems: 'flex-start',
+  },
+  robotLink: {
+    textDecorationLine: 'underline',
+  },
+  loraText: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+  empty: {
+    ...typography.caption,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
   },
   centered: {
     flex: 1,
@@ -533,93 +621,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
   },
-  card: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    marginBottom: spacing.sm,
-  },
-  accentBar: {
-    width: 4,
-  },
-  cardBody: {
-    flex: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  headerLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  commandIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: {
-    flex: 1,
-    gap: 2,
-  },
-  robotNo: { ...typography.label, fontSize: 15, fontWeight: '700' },
-  indexLabel: { ...typography.caption, fontSize: 11 },
-  chipRow: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  chipText: { ...typography.caption, fontSize: 10 },
-  senderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   avatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    flexShrink: 0,
   },
   avatarFallback: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  senderText: { flex: 1, gap: 1 },
-  senderName: { ...typography.bodySmall, fontWeight: '600' },
-  senderEmail: { ...typography.caption, fontSize: 10 },
-  detailsBox: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  details: { ...typography.bodySmall, lineHeight: 18 },
-  timestamp: {
-    ...typography.caption,
-    fontSize: 10,
-    maxWidth: 88,
-    textAlign: 'right',
   },
   pager: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     gap: spacing.sm,
   },

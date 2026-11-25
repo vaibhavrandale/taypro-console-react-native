@@ -32,7 +32,53 @@ type Atmosphere = {
   headline: string;
 };
 
-function getAtmosphere(condition: WeatherCondition): Atmosphere {
+function isNightHour(date = new Date()) {
+  return date.getHours() >= 18;
+}
+
+function getAtmosphere(condition: WeatherCondition, night: boolean): Atmosphere {
+  if (night) {
+    const light = {
+      text: '#F8FAFC',
+      muted: 'rgba(248, 250, 252, 0.76)',
+      pillBg: 'rgba(255, 255, 255, 0.14)',
+      pillText: '#F8FAFC',
+      accent: '#FDE68A',
+    };
+    switch (condition) {
+      case 'cloudy':
+        return {
+          ...light,
+          colors: ['#1E293B', '#334155', '#3F4C63'],
+          headline: 'Clouds overhead',
+        };
+      case 'rainy':
+        return {
+          ...light,
+          colors: ['#0F172A', '#1E3A5F', '#172554'],
+          headline: "It's raining at your site",
+        };
+      case 'stormy':
+        return {
+          ...light,
+          colors: ['#020617', '#0F172A', '#1E293B'],
+          headline: 'Stormy weather outside',
+        };
+      case 'foggy':
+        return {
+          ...light,
+          colors: ['#1F2937', '#374151', '#4B5563'],
+          headline: 'Low visibility nearby',
+        };
+      default:
+        return {
+          ...light,
+          colors: ['#0B1026', '#162544', '#243B67'],
+          headline: 'Clear skies at your site',
+        };
+    }
+  }
+
   switch (condition) {
     case 'sunny':
       return {
@@ -340,15 +386,61 @@ function RainDrop({
   );
 }
 
-function WeatherArt({ condition }: { condition: WeatherCondition }) {
+function Stars() {
+  const spots = [
+    { top: 16, right: 30, size: 3 },
+    { top: 34, right: 72, size: 2 },
+    { top: 12, right: 100, size: 2 },
+    { top: 52, right: 46, size: 2 },
+    { top: 44, right: 118, size: 3 },
+  ];
+  return (
+    <>
+      {spots.map((star) => (
+        <View
+          key={`${star.top}-${star.right}`}
+          style={{
+            position: 'absolute',
+            top: star.top,
+            right: star.right,
+            width: star.size,
+            height: star.size,
+            borderRadius: 99,
+            backgroundColor: '#F8FAFC',
+            opacity: 0.9,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
+function WeatherArt({
+  condition,
+  night,
+}: {
+  condition: WeatherCondition;
+  night: boolean;
+}) {
   if (condition === 'sunny' || condition === 'unknown') {
     return (
       <View style={styles.artStage} pointerEvents="none">
-        <View style={[styles.sunGlow, { width: 120, height: 120, opacity: 0.35 }]} />
-        <View style={[styles.sunGlow, { width: 88, height: 88, opacity: 0.5 }]} />
-        <View style={styles.sunDisk} />
-        <SoftCloud width={110} top={78} left={-18} opacity={0.95} shade="#FFFFFF" />
-        <SoftCloud width={78} top={92} left={70} opacity={0.88} shade="#FFF7ED" />
+        {night ? (
+          <>
+            <Stars />
+            <View style={[styles.moonGlow, { width: 110, height: 110, opacity: 0.28 }]} />
+            <View style={styles.moonDisk} />
+            <SoftCloud width={100} top={84} left={-16} opacity={0.35} shade="#CBD5E1" />
+          </>
+        ) : (
+          <>
+            <View style={[styles.sunGlow, { width: 120, height: 120, opacity: 0.35 }]} />
+            <View style={[styles.sunGlow, { width: 88, height: 88, opacity: 0.5 }]} />
+            <View style={styles.sunDisk} />
+            <SoftCloud width={110} top={78} left={-18} opacity={0.95} shade="#FFFFFF" />
+            <SoftCloud width={78} top={92} left={70} opacity={0.88} shade="#FFF7ED" />
+          </>
+        )}
       </View>
     );
   }
@@ -356,13 +448,14 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
   if (condition === 'cloudy') {
     return (
       <View style={styles.artStage} pointerEvents="none">
+        {night ? <Stars /> : null}
         <DriftCloud
           width={130}
           top={28}
           from={-90}
           travel={280}
           duration={26000}
-          shade="#F8FAFC"
+          shade={night ? '#64748B' : '#F8FAFC'}
           opacity={0.95}
         />
         <DriftCloud
@@ -372,7 +465,7 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
           travel={300}
           duration={32000}
           delay={600}
-          shade="#E2E8F0"
+          shade={night ? '#475569' : '#E2E8F0'}
           opacity={0.9}
         />
         <DriftCloud
@@ -382,7 +475,7 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
           travel={260}
           duration={29000}
           delay={1400}
-          shade="#F1F5F9"
+          shade={night ? '#334155' : '#F1F5F9'}
           opacity={0.85}
         />
       </View>
@@ -393,26 +486,27 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
     const heavy = condition === 'stormy';
     return (
       <View style={styles.artStage} pointerEvents="none">
+        {night ? <Stars /> : null}
         <SoftCloud
           width={140}
           top={8}
           left={20}
           opacity={0.95}
-          shade={heavy ? '#94A3B8' : '#CBD5E1'}
+          shade={night ? '#334155' : heavy ? '#94A3B8' : '#CBD5E1'}
         />
         <SoftCloud
           width={110}
           top={22}
           left={-30}
           opacity={0.9}
-          shade={heavy ? '#64748B' : '#94A3B8'}
+          shade={night ? '#1E293B' : heavy ? '#64748B' : '#94A3B8'}
         />
         <SoftCloud
           width={96}
           top={14}
           left={100}
           opacity={0.88}
-          shade={heavy ? '#788797' : '#E2E8F0'}
+          shade={night ? '#475569' : heavy ? '#788797' : '#E2E8F0'}
         />
         <RainLayer count={heavy ? 32 : 24} sceneH={160} />
       </View>
@@ -422,8 +516,21 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
   // foggy
   return (
     <View style={styles.artStage} pointerEvents="none">
-      <SoftCloud width={140} top={40} left={-20} opacity={0.45} shade="#FFFFFF" />
-      <SoftCloud width={120} top={70} left={40} opacity={0.35} shade="#F8FAFC" />
+      {night ? <Stars /> : null}
+      <SoftCloud
+        width={140}
+        top={40}
+        left={-20}
+        opacity={night ? 0.28 : 0.45}
+        shade={night ? '#94A3B8' : '#FFFFFF'}
+      />
+      <SoftCloud
+        width={120}
+        top={70}
+        left={40}
+        opacity={night ? 0.22 : 0.35}
+        shade={night ? '#CBD5E1' : '#F8FAFC'}
+      />
       <View style={[styles.fogBand, { top: 50, opacity: 0.4 }]} />
       <View style={[styles.fogBand, { top: 78, opacity: 0.28 }]} />
       <View style={[styles.fogBand, { top: 104, opacity: 0.2 }]} />
@@ -434,7 +541,11 @@ function WeatherArt({ condition }: { condition: WeatherCondition }) {
 const WeatherHero = memo(function WeatherHero({ weather }: Props) {
   const condition = useMemo(() => getWeatherCondition(weather), [weather]);
   const label = getWeatherLabel(condition, weather);
-  const atmosphere = useMemo(() => getAtmosphere(condition), [condition]);
+  const night = isNightHour();
+  const atmosphere = useMemo(
+    () => getAtmosphere(condition, night),
+    [condition, night],
+  );
   const temp =
     weather.temperature != null ? Math.round(weather.temperature) : null;
 
@@ -445,7 +556,7 @@ const WeatherHero = memo(function WeatherHero({ weather }: Props) {
       end={{ x: 0.95, y: 1 }}
       style={styles.hero}
     >
-      <WeatherArt condition={condition} />
+      <WeatherArt condition={condition} night={night} />
 
       <View style={styles.heroContent}>
         <View style={styles.liveRow}>
@@ -469,9 +580,6 @@ const WeatherHero = memo(function WeatherHero({ weather }: Props) {
         </View>
 
         <Text style={[styles.headline, { color: atmosphere.text }]}>
-          {atmosphere.headline}
-        </Text>
-        <Text style={[styles.conditionLabel, { color: atmosphere.muted }]}>
           {label}
         </Text>
 
@@ -541,10 +649,7 @@ export function WeatherCard({ weather }: Props) {
     <View
       style={[
         styles.card,
-        {
-          borderColor: colors.border,
-          backgroundColor: colors.backgroundSecondary,
-        },
+        { backgroundColor: colors.backgroundSecondary },
       ]}
     >
       <WeatherHero weather={weather} />
@@ -554,8 +659,8 @@ export function WeatherCard({ weather }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
+    marginTop: spacing.xs,
     marginBottom: spacing.md,
     overflow: 'hidden',
   },
@@ -605,6 +710,7 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontSize: 16,
     marginTop: 2,
+    textTransform: 'capitalize',
   },
   conditionLabel: {
     ...typography.bodySmall,
@@ -661,6 +767,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBBF24',
     borderWidth: 3,
     borderColor: 'rgba(255, 251, 235, 0.95)',
+  },
+  moonGlow: {
+    position: 'absolute',
+    top: 22,
+    right: 22,
+    borderRadius: 999,
+    backgroundColor: '#E2E8F0',
+  },
+  moonDisk: {
+    position: 'absolute',
+    top: 40,
+    right: 40,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 3,
+    borderColor: 'rgba(226, 232, 240, 0.35)',
   },
   ellipse: {
     position: 'absolute',

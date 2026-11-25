@@ -10,6 +10,7 @@ export type RobotNotificationActivity = {
 export type RobotNotification = {
   _id: string;
   robot_no?: string;
+  lora_no?: string;
   command?: string;
   deveui?: string;
   site_id?: string;

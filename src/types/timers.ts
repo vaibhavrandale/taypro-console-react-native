@@ -25,12 +25,14 @@ export type BlockTimer = {
   timer2_date?: string;
   timer3?: string;
   timer3_date?: string;
+  timer_command?: string;
   is_available_to_edit?: boolean;
   is_timer_updated?: boolean;
   timer_updated_at?: string | { $date?: string };
   createdAt?: string | { $date?: string };
   updatedAt?: string | { $date?: string };
   last_activity?: TimerLastActivity | TimerLastActivity[];
+  activity_count?: number;
   [key: string]: unknown;
 };
 
@@ -43,4 +45,5 @@ export type UpdateTimerPayload = {
   timer2_date: string;
   timer3: string;
   timer3_date: string;
+  timer_command?: string;
 };

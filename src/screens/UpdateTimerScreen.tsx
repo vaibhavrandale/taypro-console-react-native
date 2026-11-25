@@ -20,8 +20,9 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Navbar } from '../components/layout';
+import { AppleTimePicker } from '../components/timers/AppleTimePicker';
 import { Badge, Button } from '../components/ui';
-import { fetchTimerById, updateTimer } from '../api/timers';
+import { bulkUpdateTimers, fetchTimerById, updateTimer } from '../api/timers';
 import { useTheme } from '../theme';
 import { radius, spacing } from '../theme/spacing';
 import { typography } from '../theme/typography';
@@ -86,7 +87,22 @@ export function UpdateTimerScreen() {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation<Navigation>();
   const route = useRoute<Route>();
-  const { timerId } = route.params;
+  const timerIds = route.params.timerIds?.length
+    ? route.params.timerIds
+    : route.params.timerId
+      ? [route.params.timerId]
+      : [];
+  const isBulk = timerIds.length > 1;
+  const timerId = timerIds[0] ?? '';
+  const selectedBlocks = route.params.blocks ?? [];
+  const blocksBySite = selectedBlocks.reduce<Record<string, string[]>>(
+    (groups, item) => {
+      const siteId = item.siteId || '—';
+      groups[siteId] = [...(groups[siteId] ?? []), item.block || '—'];
+      return groups;
+    },
+    {},
+  );
 
   const [form, setForm] = useState<UpdateTimerPayload>({
     site_id: '',
@@ -97,6 +113,7 @@ export function UpdateTimerScreen() {
     timer2_date: '',
     timer3: DISABLED_TIMER,
     timer3_date: '',
+    timer_command: '11',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,6 +123,11 @@ export function UpdateTimerScreen() {
   const [pickerDate, setPickerDate] = useState(new Date());
 
   const loadTimer = useCallback(async () => {
+    if (!timerId) {
+      setLoading(false);
+      setError('Select at least one block');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -119,6 +141,8 @@ export function UpdateTimerScreen() {
         timer2_date: data.timer2_date || '',
         timer3: data.timer3 || DISABLED_TIMER,
         timer3_date: data.timer3_date || '',
+        timer_command:
+          typeof data.timer_command === 'string' ? data.timer_command : '11',
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load timer');
@@ -178,8 +202,14 @@ export function UpdateTimerScreen() {
   const handleSubmit = async () => {
     setSaving(true);
     try {
-      await updateTimer(timerId, form);
-      appAlert('Success', 'Timer updated successfully.', [
+      const result = isBulk
+        ? await bulkUpdateTimers(timerIds, form)
+        : null;
+      if (!isBulk) await updateTimer(timerId, form);
+      const skipped = result?.skipped
+        ? ` ${result.skipped} block(s) were skipped.`
+        : '';
+      appAlert('Success', `${result?.message ?? 'Timer updated successfully.'}${skipped}`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err) {
@@ -213,55 +243,85 @@ export function UpdateTimerScreen() {
           {label}
         </Text>
 
-        <Pressable
-          onPress={() => openTimePicker(timeKey)}
-          disabled={disabled}
-          style={[
-            styles.field,
-            {
-              backgroundColor: colors.backgroundTertiary,
-              borderColor: colors.border,
-              opacity: disabled ? 0.55 : 1,
-            },
-          ]}
-        >
-          <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-            Time
-          </Text>
-          <View style={styles.fieldValueRow}>
-            <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>
-              {displayTime(form[timeKey])}
+        <View style={styles.fieldsRow}>
+          <Pressable
+            onPress={() => openTimePicker(timeKey)}
+            disabled={disabled}
+            style={[
+              styles.field,
+              styles.timeField,
+              {
+                backgroundColor: colors.backgroundTertiary,
+                borderColor: colors.border,
+                opacity: disabled ? 0.55 : 1,
+              },
+            ]}
+          >
+            <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+              Time
             </Text>
-            <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-          </View>
-        </Pressable>
+            <View style={styles.fieldValueRow}>
+              <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>
+                {displayTime(form[timeKey])}
+              </Text>
+              <Ionicons name="time-outline" size={16} color={colors.textMuted} />
+            </View>
+          </Pressable>
 
-        <Pressable
-          onPress={() => openDatePicker(dateKey)}
-          style={[
-            styles.field,
-            {
-              backgroundColor: colors.backgroundTertiary,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
-            Date
-          </Text>
-          <View style={styles.fieldValueRow}>
-            <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>
-              {form[dateKey]
-                ? formatApiDateLabel(form[dateKey])
-                : 'Select date'}
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== 'web') openDatePicker(dateKey);
+            }}
+            style={[
+              styles.field,
+              styles.dateField,
+              {
+                backgroundColor: colors.backgroundTertiary,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>
+              Date
             </Text>
-            <Ionicons
-              name="calendar-outline"
-              size={16}
-              color={colors.textMuted}
-            />
-          </View>
-        </Pressable>
+            <View style={styles.fieldValueRow}>
+              <Text style={[styles.fieldValue, { color: colors.textPrimary }]}>
+                {form[dateKey]
+                  ? formatApiDateLabel(form[dateKey])
+                  : 'Select date'}
+              </Text>
+              <Ionicons
+                name="calendar-outline"
+                size={16}
+                color={colors.textMuted}
+              />
+            </View>
+            {Platform.OS === 'web'
+              ? React.createElement('input', {
+                  type: 'date',
+                  value: form[dateKey],
+                  onChange: (event: { target: { value: string } }) => {
+                    if (event.target.value) {
+                      setForm((prev) => ({
+                        ...prev,
+                        [dateKey]: event.target.value,
+                      }));
+                    }
+                  },
+                  'aria-label': `${label} date`,
+                  style: {
+                    position: 'absolute',
+                    inset: 0,
+                    opacity: 0,
+                    width: '100%',
+                    height: '100%',
+                    cursor: 'pointer',
+                    border: 'none',
+                  },
+                })
+              : null}
+          </Pressable>
+        </View>
 
         <View style={styles.switchRow}>
           <Text style={[styles.switchLabel, { color: colors.textSecondary }]}>
@@ -286,11 +346,13 @@ export function UpdateTimerScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Navbar
-        title="Update Timer"
+        title={isBulk ? `Update ${timerIds.length} blocks` : 'Update Timer'}
         subtitle={
-          form.site_id && form.block
-            ? `${form.site_id} · ${form.block}`
-            : undefined
+          isBulk
+            ? 'Same times apply to every selected block'
+            : form.site_id && form.block
+              ? `${form.site_id} · ${form.block}`
+              : undefined
         }
         showMenu={false}
         leftAction={
@@ -323,9 +385,47 @@ export function UpdateTimerScreen() {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
+          {isBulk && selectedBlocks.length > 0 ? (
+            <View
+              style={[
+                styles.selectionCard,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              {Object.entries(blocksBySite).map(([siteId, blocks]) => (
+                <View key={siteId} style={styles.siteGroup}>
+                  <Text style={[styles.siteLabel, { color: colors.textMuted }]}>
+                    Site
+                  </Text>
+                  <Text style={[styles.siteValue, { color: colors.textPrimary }]}>
+                    {siteId}
+                  </Text>
+                  <Text style={[styles.siteLabel, { color: colors.textMuted }]}>
+                    Blocks
+                  </Text>
+                  {blocks.map((block) => (
+                    <Text
+                      key={`${siteId}-${block}`}
+                      style={[styles.blockItem, { color: colors.textSecondary }]}
+                    >
+                      {block}
+                    </Text>
+                  ))}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <View style={styles.headerRow}>
             <Badge
-              label={`${form.site_id} : ${form.block}`}
+              label={
+                isBulk
+                  ? `${timerIds.length} blocks`
+                  : `${form.site_id} : ${form.block}`
+              }
               variant="warning"
             />
             <Pressable
@@ -350,6 +450,64 @@ export function UpdateTimerScreen() {
           {renderTimerSlot('timer2', 'timer2_date', 'Timer 2')}
           {renderTimerSlot('timer3', 'timer3_date', 'Timer 3')}
 
+          <Text style={[styles.commandHeading, { color: colors.textMuted }]}>
+            Timer command
+          </Text>
+          <View style={styles.commandRow}>
+            {(
+              [
+                ['11', 'Normal', 'success'],
+                ['13', 'Intelligent', 'warning'],
+              ] as const
+            ).map(([value, label, tone]) => {
+              const selected = (form.timer_command || '11') === value;
+              const accent = colors.badge[tone];
+              return (
+                <Pressable
+                  key={value}
+                  onPress={() =>
+                    setForm((prev) => ({ ...prev, timer_command: value }))
+                  }
+                  style={[
+                    styles.commandOption,
+                    {
+                      borderColor: selected ? accent.text : colors.border,
+                      backgroundColor: selected
+                        ? accent.bg
+                        : colors.backgroundSecondary,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.commandRadio,
+                      {
+                        borderColor: selected ? accent.text : colors.border,
+                        backgroundColor: selected ? accent.text : 'transparent',
+                      },
+                    ]}
+                  >
+                    {selected ? (
+                      <Ionicons name="checkmark" size={12} color="#04120F" />
+                    ) : null}
+                  </View>
+                  <View style={styles.commandCopy}>
+                    <Text
+                      style={[styles.commandLabel, { color: colors.textPrimary }]}
+                    >
+                      {label}
+                    </Text>
+                    <Text
+                      style={[styles.commandHint, { color: colors.textMuted }]}
+                    >
+                      Command {value}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+
           <Button
             title={saving ? 'Updating...' : 'Update'}
             onPress={handleSubmit}
@@ -359,22 +517,21 @@ export function UpdateTimerScreen() {
         </ScrollView>
       )}
 
-      {pickerTarget && Platform.OS === 'android' ? (
+      {pickerTarget && !isTimePicker && Platform.OS === 'android' ? (
         <DateTimePicker
           value={pickerDate}
-          mode={isTimePicker ? 'time' : 'date'}
+          mode="date"
           display="default"
           onValueChange={(_event, picked) => {
             applyPickedValue(picked);
             setPickerTarget(null);
           }}
           onDismiss={() => setPickerTarget(null)}
-          is24Hour={false}
         />
       ) : null}
 
       <Modal
-        visible={pickerTarget != null && Platform.OS === 'ios'}
+        visible={isTimePicker}
         transparent
         animationType="slide"
         onRequestClose={() => setPickerTarget(null)}
@@ -395,7 +552,53 @@ export function UpdateTimerScreen() {
           >
             <View style={styles.pickerHeader}>
               <Text style={[styles.pickerTitle, { color: colors.textPrimary }]}>
-                {isTimePicker ? 'Select time' : 'Select date'}
+                {pickerTarget
+                  ? displayTime(form[pickerTarget as 'timer1' | 'timer2' | 'timer3'])
+                  : 'Select time'}
+              </Text>
+              <Pressable onPress={() => setPickerTarget(null)}>
+                <Text style={{ color: colors.primary, ...typography.label }}>
+                  Done
+                </Text>
+              </Pressable>
+            </View>
+            {pickerTarget ? (
+              <AppleTimePicker
+                value={form[pickerTarget as 'timer1' | 'timer2' | 'timer3']}
+                colors={colors}
+                onChange={(next) => {
+                  const key = pickerTarget;
+                  setForm((prev) => ({ ...prev, [key]: next }));
+                }}
+              />
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={pickerTarget != null && !isTimePicker && Platform.OS === 'ios'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerTarget(null)}
+      >
+        <View style={styles.pickerOverlay}>
+          <Pressable
+            style={styles.pickerBackdrop}
+            onPress={() => setPickerTarget(null)}
+          />
+          <View
+            style={[
+              styles.pickerSheet,
+              {
+                backgroundColor: colors.backgroundSecondary,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View style={styles.pickerHeader}>
+              <Text style={[styles.pickerTitle, { color: colors.textPrimary }]}>
+                Select date
               </Text>
               <Pressable onPress={() => setPickerTarget(null)}>
                 <Text style={{ color: colors.primary, ...typography.label }}>
@@ -405,11 +608,10 @@ export function UpdateTimerScreen() {
             </View>
             <DateTimePicker
               value={pickerDate}
-              mode={isTimePicker ? 'time' : 'date'}
+              mode="date"
               display="spinner"
               onValueChange={(_event, picked) => applyPickedValue(picked)}
               themeVariant={isDark ? 'dark' : 'light'}
-              is24Hour={false}
             />
           </View>
         </View>
@@ -625,6 +827,48 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.xl,
   },
+  commandHeading: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: -spacing.xs,
+  },
+  commandRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  commandOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  commandRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commandCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  commandLabel: {
+    ...typography.label,
+    fontWeight: '700',
+  },
+  commandHint: {
+    ...typography.caption,
+    fontSize: 10,
+  },
   centered: {
     flex: 1,
     alignItems: 'center',
@@ -635,6 +879,31 @@ const styles = StyleSheet.create({
   errorText: {
     ...typography.body,
     textAlign: 'center',
+  },
+  selectionCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    gap: spacing.xs,
+  },
+  siteGroup: {
+    gap: 2,
+  },
+  siteLabel: {
+    ...typography.caption,
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  siteValue: {
+    ...typography.label,
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  blockItem: {
+    ...typography.bodySmall,
+    fontSize: 13,
   },
   headerRow: {
     flexDirection: 'row',
@@ -659,6 +928,16 @@ const styles = StyleSheet.create({
   slotTitle: {
     ...typography.label,
     fontSize: 14,
+  },
+  fieldsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  timeField: {
+    flex: 1.3,
+  },
+  dateField: {
+    flex: 1,
   },
   field: {
     borderWidth: 1,

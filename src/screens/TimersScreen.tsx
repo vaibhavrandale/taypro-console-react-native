@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Navbar } from '../components/layout';
 import { TimerCard } from '../components/timers/TimerCard';
@@ -112,9 +112,11 @@ export function TimersScreen() {
     [siteId],
   );
 
-  useEffect(() => {
-    void loadTimers();
-  }, [loadTimers]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadTimers();
+    }, [loadTimers]),
+  );
 
   useEffect(() => {
     setBlockSearch('');
@@ -130,9 +132,17 @@ export function TimersScreen() {
     });
   }, [timers, blockSearch]);
 
+  const selectableTimers = useMemo(
+    () =>
+      filteredTimers.filter((timer) =>
+        canEditTimer(user?.role, timer.is_available_to_edit),
+      ),
+    [filteredTimers, user?.role],
+  );
+
   const allSelected =
-    filteredTimers.length > 0 &&
-    filteredTimers.every((timer) => selectedIds.has(timer._id));
+    selectableTimers.length > 0 &&
+    selectableTimers.every((timer) => selectedIds.has(timer._id));
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -147,15 +157,30 @@ export function TimersScreen() {
     if (allSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        for (const timer of filteredTimers) next.delete(timer._id);
+        for (const timer of selectableTimers) next.delete(timer._id);
         return next;
       });
       return;
     }
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      for (const timer of filteredTimers) next.add(timer._id);
+      for (const timer of selectableTimers) next.add(timer._id);
       return next;
+    });
+  };
+
+  const openBulkUpdate = () => {
+    if (selectedIds.size === 0) {
+      appAlert('Select blocks', 'Please select at least one block to update.');
+      return;
+    }
+    const selected = timers.filter((timer) => selectedIds.has(timer._id));
+    navigation.navigate('UpdateTimer', {
+      timerIds: selected.map((timer) => timer._id),
+      blocks: selected.map((timer) => ({
+        siteId: timer.site_id,
+        block: timer.block,
+      })),
     });
   };
 
@@ -237,17 +262,17 @@ export function TimersScreen() {
         </View>
       </View>
 
-      {showBulkToggle ? (
+      {selectableTimers.length > 0 || showBulkToggle ? (
         <View style={styles.bulkRow}>
           <Pressable
             onPress={toggleSelectAll}
-            disabled={filteredTimers.length === 0}
+            disabled={selectableTimers.length === 0}
             style={[
               styles.selectAll,
               {
                 borderColor: colors.border,
                 backgroundColor: colors.backgroundSecondary,
-                opacity: filteredTimers.length === 0 ? 0.5 : 1,
+                opacity: selectableTimers.length === 0 ? 0.5 : 1,
               },
             ]}
           >
@@ -269,19 +294,34 @@ export function TimersScreen() {
             </Text>
           </Pressable>
 
-          <Button
-            title={
-              bulkLoading
-                ? 'Updating...'
-                : selectedIds.size > 0
-                  ? `Toggle (${selectedIds.size})`
-                  : 'Toggle Permission'
-            }
-            size="sm"
-            onPress={handleBulkToggle}
-            loading={bulkLoading}
-            disabled={selectedIds.size === 0}
-          />
+          <View style={styles.bulkActions}>
+            <Button
+              title={
+                selectedIds.size > 0
+                  ? `Update (${selectedIds.size})`
+                  : 'Update selected'
+              }
+              size="sm"
+              onPress={openBulkUpdate}
+              disabled={selectedIds.size === 0}
+            />
+            {showBulkToggle ? (
+              <Button
+                title={
+                  bulkLoading
+                    ? 'Updating...'
+                    : selectedIds.size > 0
+                      ? `Toggle (${selectedIds.size})`
+                      : 'Toggle'
+                }
+                size="sm"
+                variant="outline"
+                onPress={handleBulkToggle}
+                loading={bulkLoading}
+                disabled={selectedIds.size === 0}
+              />
+            ) : null}
+          </View>
         </View>
       ) : null}
 
@@ -350,7 +390,7 @@ export function TimersScreen() {
             <TimerCard
               timer={item}
               index={index + 1}
-              selectable={showBulkToggle}
+              selectable={canEditTimer(user?.role, item.is_available_to_edit)}
               selected={selectedIds.has(item._id)}
               canUpdate={canEditTimer(user?.role, item.is_available_to_edit)}
               onToggleSelect={() => toggleSelect(item._id)}
@@ -425,6 +465,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
+  },
+  bulkActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   selectAll: {
     flexDirection: 'row',

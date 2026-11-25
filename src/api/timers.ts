@@ -45,6 +45,31 @@ export async function fetchTimers(siteId: string): Promise<BlockTimer[]> {
   return [];
 }
 
+export async function fetchTimerActivity(
+  id: string,
+  offset: number,
+  limit = 10,
+): Promise<{ last_activity: BlockTimer['last_activity']; activity_count: number }> {
+  const params = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  });
+  const response = await apiFetch(
+    `/timers/${encodeURIComponent(id)}/activity?${params}`,
+  );
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throwApiError(payload, 'Failed to load timer activity');
+  }
+
+  const data = isRecord(payload) && isRecord(payload.data) ? payload.data : {};
+  const last = data.last_activity;
+  return {
+    last_activity: Array.isArray(last) ? (last as BlockTimer['last_activity']) : [],
+    activity_count: Number(data.activity_count) || 0,
+  };
+}
+
 export async function fetchTimerById(id: string): Promise<BlockTimer> {
   const response = await apiFetch(`/timers/${encodeURIComponent(id)}`);
   const payload = await parseJson(response);
@@ -74,6 +99,38 @@ export async function updateTimer(
   if (!response.ok) {
     throwApiError(payload, 'Failed to update timer');
   }
+}
+
+export async function bulkUpdateTimers(
+  ids: string[],
+  data: UpdateTimerPayload,
+): Promise<{ message: string; skipped: number }> {
+  const response = await apiFetch('/timers/bulk', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ids,
+      timer1: data.timer1,
+      timer1_date: data.timer1_date,
+      timer2: data.timer2,
+      timer2_date: data.timer2_date,
+      timer3: data.timer3,
+      timer3_date: data.timer3_date,
+      timer_command: data.timer_command || '11',
+    }),
+  });
+
+  const payload = await parseJson(response);
+  if (!response.ok) {
+    throwApiError(payload, 'Bulk timer update failed');
+  }
+
+  const root = isRecord(payload) ? payload : {};
+  const skipped = Array.isArray(root.skipped) ? root.skipped.length : 0;
+  return {
+    message: String(root.message ?? 'Timers updated successfully.'),
+    skipped,
+  };
 }
 
 export async function bulkToggleTimerPermission(

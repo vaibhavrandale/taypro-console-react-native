@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Badge, BadgeVariant } from '../ui/Badge';
 import { useTheme } from '../../theme';
 import { ThemeColors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -64,15 +65,73 @@ function isDprRecord(item: CleaningRow): item is DprRecord {
   );
 }
 
+function statusBadgeTone(value: string): BadgeVariant | null {
+  const text = value.trim().toLowerCase();
+  if (!text || text === '—') return null;
+  if (
+    text === 'online' ||
+    text === 'finished' ||
+    text === 'completed' ||
+    text === 'success' ||
+    text.includes('cleaned')
+  ) {
+    return 'success';
+  }
+  if (text === 'offline' || text.includes('fail') || text === 'cancelled' || text.includes('battery')) {
+    return 'error';
+  }
+  if (text.includes('progress') || text === 'running') return 'warning';
+  return null;
+}
+
+function cleaningStatusTone(category: CleaningLogCategory, value: string): BadgeVariant | null {
+  return (
+    statusBadgeTone(value) ??
+    (category === 'completed'
+      ? 'success'
+      : category === 'inprogress'
+        ? 'warning'
+        : category === 'failure'
+          ? 'error'
+          : null)
+  );
+}
+
+function StatusCell({
+  width,
+  label,
+  tone,
+  colors,
+}: {
+  width: number;
+  label: string;
+  tone: BadgeVariant | null;
+  colors: ThemeColors;
+}) {
+  if (!tone) {
+    return (
+      <Cell width={width} colors={colors}>
+        {label}
+      </Cell>
+    );
+  }
+  return (
+    <View style={{ width, alignItems: 'center' }}>
+      <Badge label={label} variant={tone} size="sm" />
+    </View>
+  );
+}
+
 function Cell({
   width,
   children,
   colors,
   bold,
-  numberOfLines = 2,
+  numberOfLines = 1,
   fullText = false,
   highlight = false,
   highlightTone = 'error',
+  color,
 }: {
   width: number;
   children: React.ReactNode;
@@ -84,6 +143,7 @@ function Cell({
   /** Duplicate robot_no highlight. */
   highlight?: boolean;
   highlightTone?: keyof ThemeColors['badge'];
+  color?: string;
 }) {
   const badge = colors.badge[highlightTone];
   return (
@@ -94,11 +154,13 @@ function Cell({
         highlight && styles.cellHighlight,
         {
           width,
-          color: highlight
-            ? badge.text
-            : bold
-              ? colors.textPrimary
-              : colors.textSecondary,
+          color: color
+            ? color
+            : highlight
+              ? badge.text
+              : bold
+                ? colors.textPrimary
+                : colors.textSecondary,
           backgroundColor: highlight ? badge.bg : undefined,
         },
       ]}
@@ -174,30 +236,43 @@ function HeaderShell({
   );
 }
 
+const SR_WIDTH = 38;
+
 const cleaningWidths = {
-  sr: 34,
-  robot: 108,
-  status: 240,
-  block: 84,
-  rowNo: 72,
-  rowLength: 92,
-  percentage: 88,
-  startedAt: 108,
-  finishedAt: 108,
-  batteryStart: 88,
-  batteryEnd: 92,
+  sr: SR_WIDTH,
+  robot: 96,
+  status: 84,
+  block: 42,
+  rowNo: 48,
+  rowLength: 70,
+  percentage: 62,
+  startedAt: 84,
+  finishedAt: 84,
+  batteryStart: 70,
+  batteryEnd: 78,
 };
 
+function cleaningColumnWidths(category: CleaningLogCategory) {
+  if (category !== 'failure') return cleaningWidths;
+  return { ...cleaningWidths, status: 116, block: 72 };
+}
+
+function cleaningTableWidth(category: CleaningLogCategory) {
+  return category === 'failure'
+    ? CLEANING_LOG_TABLE_WIDTH + 62
+    : CLEANING_LOG_TABLE_WIDTH;
+}
+
 const dprWidths = {
-  technician: 200,
-  time: 108,
-  remarks: 220,
-  site: 92,
-  ready: 52,
-  online: 52,
-  manual: 52,
-  unop: 52,
-  uptime: 52,
+  technician: 140,
+  time: 84,
+  remarks: 120,
+  site: 60,
+  ready: 40,
+  online: 40,
+  manual: 40,
+  unop: 40,
+  uptime: 44,
 };
 
 function TechnicianCell({
@@ -263,6 +338,9 @@ export function CleaningLogTableRow({
 
     return (
       <RowShell width={DPR_TABLE_WIDTH} colors={colors}>
+        <Cell width={SR_WIDTH} colors={colors}>
+          {index}
+        </Cell>
         <TechnicianCell
           width={dprWidths.technician}
           record={item}
@@ -300,24 +378,31 @@ export function CleaningLogTableRow({
     const offline = item as OfflineRobotLog;
     return (
       <RowShell width={OFFLINE_LOG_TABLE_WIDTH} colors={colors}>
+        <Cell width={SR_WIDTH} colors={colors}>
+          {index}
+        </Cell>
         <Cell
-          width={108}
+          width={96}
           colors={colors}
           bold
+          fullText
           highlight={highlightRobotNo}
           highlightTone={robotTone}
         >
           {offline.robot_no || '—'}
         </Cell>
-        <Cell width={84} colors={colors}>
+        <Cell width={42} colors={colors}>
           {offline.block || '—'}
         </Cell>
-        <Cell width={120} colors={colors}>
+        <Cell width={84} colors={colors}>
           {formatLogDateTime(offline.createdAt)}
         </Cell>
-        <Cell width={96} colors={colors}>
-          {offline.error_type || 'offline'}
-        </Cell>
+        <StatusCell
+          width={62}
+          label={offline.error_type || 'offline'}
+          tone={statusBadgeTone(offline.error_type || 'offline')}
+          colors={colors}
+        />
       </RowShell>
     );
   }
@@ -325,22 +410,29 @@ export function CleaningLogTableRow({
   if (category === 'not_started' && isNotStarted(item)) {
     return (
       <RowShell width={NOT_STARTED_TABLE_WIDTH} colors={colors}>
+        <Cell width={SR_WIDTH} colors={colors}>
+          {index}
+        </Cell>
         <Cell
-          width={108}
+          width={96}
           colors={colors}
           bold
+          fullText
           highlight={highlightRobotNo}
           highlightTone={robotTone}
         >
           {item.robot_no || '—'}
         </Cell>
-        <Cell width={84} colors={colors}>
+        <Cell width={42} colors={colors}>
           {item.block || '—'}
         </Cell>
-        <Cell width={96} colors={colors}>
-          {formatOnlineStatus(item.lora_state)}
-        </Cell>
-        <Cell width={140} colors={colors}>
+        <StatusCell
+          width={48}
+          label={formatOnlineStatus(item.lora_state)}
+          tone={statusBadgeTone(formatOnlineStatus(item.lora_state))}
+          colors={colors}
+        />
+        <Cell width={84} colors={colors}>
           {formatLogDateTime(item.last_uplink)}
         </Cell>
       </RowShell>
@@ -350,48 +442,68 @@ export function CleaningLogTableRow({
   if (!isCleaningLog(item)) return null;
 
   const cleaning = item.cleaning;
+  const columns = cleaningColumnWidths(category);
 
   return (
-    <RowShell width={CLEANING_LOG_TABLE_WIDTH} colors={colors}>
-      <Cell width={cleaningWidths.sr} colors={colors}>
+    <RowShell width={cleaningTableWidth(category)} colors={colors}>
+      <Cell width={columns.sr} colors={colors}>
         {index}
       </Cell>
       <Cell
-        width={cleaningWidths.robot}
+        width={columns.robot}
         colors={colors}
         bold
+        fullText
         highlight={highlightRobotNo}
         highlightTone={robotTone}
       >
         {item.robot_no || '—'}
       </Cell>
-      <Cell width={cleaningWidths.status} colors={colors} fullText>
-        {getCleaningNote(item)}
-      </Cell>
-      <Cell width={cleaningWidths.block} colors={colors}>
+      {category === 'failure' ? (
+        <Cell
+          width={columns.status}
+          colors={colors}
+          fullText
+          color={colors.badge.error.text}
+        >
+          {getCleaningNote(item)}
+        </Cell>
+      ) : (
+        <StatusCell
+          width={columns.status}
+          label={getCleaningNote(item)}
+          tone={cleaningStatusTone(category, getCleaningNote(item))}
+          colors={colors}
+        />
+      )}
+      <Cell
+        width={columns.block}
+        colors={colors}
+        fullText={category === 'failure'}
+      >
         {item.block || '—'}
       </Cell>
-      <Cell width={cleaningWidths.rowNo} colors={colors}>
+      <Cell width={columns.rowNo} colors={colors}>
         {item.row_no ?? '—'}
       </Cell>
-      <Cell width={cleaningWidths.rowLength} colors={colors}>
+      <Cell width={columns.rowLength} colors={colors}>
         {item.row_length ?? '—'}
       </Cell>
-      <Cell width={cleaningWidths.percentage} colors={colors}>
+      <Cell width={columns.percentage} colors={colors}>
         {getCleaningPercentage(item)}
       </Cell>
-      <Cell width={cleaningWidths.startedAt} colors={colors}>
+      <Cell width={columns.startedAt} colors={colors}>
         {formatLogDateTime(cleaning?.startAt)}
       </Cell>
-      <Cell width={cleaningWidths.finishedAt} colors={colors}>
+      <Cell width={columns.finishedAt} colors={colors}>
         {formatLogDateTime(cleaning?.finishAt)}
       </Cell>
-      <Cell width={cleaningWidths.batteryStart} colors={colors}>
+      <Cell width={columns.batteryStart} colors={colors}>
         {cleaning?.battery_before_cleaning != null
           ? `${cleaning.battery_before_cleaning}%`
           : '—'}
       </Cell>
-      <Cell width={cleaningWidths.batteryEnd} colors={colors}>
+      <Cell width={columns.batteryEnd} colors={colors}>
         {cleaning?.battery_after_cleaning != null
           ? `${cleaning.battery_after_cleaning}%`
           : '—'}
@@ -410,6 +522,7 @@ export function CleaningLogTableHeader({
   if (category === 'dpr') {
     return (
       <HeaderShell width={DPR_TABLE_WIDTH} colors={colors}>
+        <HeaderCell width={SR_WIDTH} label="Sr No" colors={colors} />
         <HeaderCell width={dprWidths.technician} label="Technician" colors={colors} />
         <HeaderCell width={dprWidths.time} label="Time" colors={colors} />
         <HeaderCell width={dprWidths.remarks} label="Remarks" colors={colors} />
@@ -426,10 +539,11 @@ export function CleaningLogTableHeader({
   if (category === 'offline') {
     return (
       <HeaderShell width={OFFLINE_LOG_TABLE_WIDTH} colors={colors}>
-        <HeaderCell width={108} label="Robot No" colors={colors} />
-        <HeaderCell width={84} label="Block" colors={colors} />
-        <HeaderCell width={120} label="Time At" colors={colors} />
-        <HeaderCell width={96} label="Error Type" colors={colors} />
+        <HeaderCell width={SR_WIDTH} label="Sr No" colors={colors} />
+        <HeaderCell width={96} label="Robot No" colors={colors} />
+        <HeaderCell width={42} label="Block" colors={colors} />
+        <HeaderCell width={84} label="Time At" colors={colors} />
+        <HeaderCell width={62} label="Error Type" colors={colors} />
       </HeaderShell>
     );
   }
@@ -437,40 +551,43 @@ export function CleaningLogTableHeader({
   if (category === 'not_started') {
     return (
       <HeaderShell width={NOT_STARTED_TABLE_WIDTH} colors={colors}>
-        <HeaderCell width={108} label="Robot No" colors={colors} />
-        <HeaderCell width={84} label="Block" colors={colors} />
-        <HeaderCell width={96} label="Online Status" colors={colors} />
-        <HeaderCell width={140} label="Last Uplink" colors={colors} />
+        <HeaderCell width={SR_WIDTH} label="Sr No" colors={colors} />
+        <HeaderCell width={96} label="Robot No" colors={colors} />
+        <HeaderCell width={42} label="Block" colors={colors} />
+        <HeaderCell width={48} label="Online Status" colors={colors} />
+        <HeaderCell width={84} label="Last Uplink" colors={colors} />
       </HeaderShell>
     );
   }
 
+  const columns = cleaningColumnWidths(category);
+
   return (
-    <HeaderShell width={CLEANING_LOG_TABLE_WIDTH} colors={colors}>
-      <HeaderCell width={cleaningWidths.sr} label="Sr" colors={colors} />
-      <HeaderCell width={cleaningWidths.robot} label="Robot No" colors={colors} />
-      <HeaderCell width={cleaningWidths.status} label="Status" colors={colors} />
-      <HeaderCell width={cleaningWidths.block} label="Block" colors={colors} />
-      <HeaderCell width={cleaningWidths.rowNo} label="Row No" colors={colors} />
+    <HeaderShell width={cleaningTableWidth(category)} colors={colors}>
+      <HeaderCell width={columns.sr} label="Sr No" colors={colors} />
+      <HeaderCell width={columns.robot} label="Robot No" colors={colors} />
+      <HeaderCell width={columns.status} label="Status" colors={colors} />
+      <HeaderCell width={columns.block} label="Block" colors={colors} />
+      <HeaderCell width={columns.rowNo} label="Row No" colors={colors} />
       <HeaderCell
-        width={cleaningWidths.rowLength}
+        width={columns.rowLength}
         label="Row Length (M)"
         colors={colors}
       />
       <HeaderCell
-        width={cleaningWidths.percentage}
+        width={columns.percentage}
         label="Cleaning %"
         colors={colors}
       />
-      <HeaderCell width={cleaningWidths.startedAt} label="Started At" colors={colors} />
-      <HeaderCell width={cleaningWidths.finishedAt} label="Finished At" colors={colors} />
+      <HeaderCell width={columns.startedAt} label="Started At" colors={colors} />
+      <HeaderCell width={columns.finishedAt} label="Finished At" colors={colors} />
       <HeaderCell
-        width={cleaningWidths.batteryStart}
+        width={columns.batteryStart}
         label="Battery Start"
         colors={colors}
       />
       <HeaderCell
-        width={cleaningWidths.batteryEnd}
+        width={columns.batteryEnd}
         label="Battery Finished"
         colors={colors}
       />
@@ -482,33 +599,34 @@ export function getTableWidth(category: CleaningLogCategory) {
   if (category === 'dpr') return DPR_TABLE_WIDTH;
   if (category === 'offline') return OFFLINE_LOG_TABLE_WIDTH;
   if (category === 'not_started') return NOT_STARTED_TABLE_WIDTH;
-  return CLEANING_LOG_TABLE_WIDTH;
+  return cleaningTableWidth(category);
 }
 
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
+    gap: 2,
   },
   headerCell: {
     ...typography.caption,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: 0.2,
-    lineHeight: 14,
+    letterSpacing: 0,
+    lineHeight: 13,
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
+    gap: 2,
   },
   technicianCell: {
     flexDirection: 'row',
@@ -532,17 +650,20 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 12,
     lineHeight: 16,
+    textAlign: 'center',
   },
   technicianEmail: {
     ...typography.caption,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '400',
+    textAlign: 'center',
   },
   cell: {
     ...typography.caption,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   cellBold: {
     fontWeight: '600',

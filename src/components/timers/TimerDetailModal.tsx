@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Modal,
@@ -11,11 +11,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button } from '../ui';
+import { fetchTimerActivity } from '../../api/timers';
 import { useStatusBarOverlay } from '../../context/StatusBarOverlayContext';
 import { useTheme } from '../../theme';
 import { radius, spacing } from '../../theme/spacing';
 import { typography } from '../../theme/typography';
-import { formatDateTimeIST } from '../../utils/datetime';
+import { formatApiDateLabel, formatDateTimeIST } from '../../utils/datetime';
 import { resolveProfileImageUri } from '../../utils/cleaningLogs';
 import {
   DISABLED_TIMER,
@@ -107,41 +108,7 @@ function decodeEntities(value: string) {
     .replace(/&#39;/g, "'");
 }
 
-function MetricTile({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  const { colors } = useTheme();
-
-  return (
-    <View
-      style={[
-        styles.metricTile,
-        {
-          backgroundColor: colors.backgroundTertiary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      <Ionicons name={icon} size={16} color={color} />
-      <Text style={[styles.metricValue, { color }]} numberOfLines={1}>
-        {value}
-      </Text>
-      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function TimerSlotCard({
+function TimerSlot({
   label,
   time,
   date,
@@ -152,56 +119,21 @@ function TimerSlotCard({
 }) {
   const { colors } = useTheme();
   const display = formatTimerDisplay(time);
-  const disabled = display == null;
 
   return (
-    <View
-      style={[
-        styles.slotCard,
-        {
-          backgroundColor: disabled
-            ? colors.badge.error.bg
-            : colors.backgroundSecondary,
-          borderColor: disabled ? colors.badge.error.text : colors.border,
-        },
-      ]}
-    >
-      <View style={styles.slotHeader}>
-        <View
-          style={[
-            styles.slotIcon,
-            {
-              backgroundColor: disabled
-                ? 'rgba(239,68,68,0.18)'
-                : colors.badge.success.bg,
-            },
-          ]}
-        >
-          <Ionicons
-            name={disabled ? 'close-circle' : 'time'}
-            size={16}
-            color={disabled ? colors.badge.error.text : colors.primary}
-          />
-        </View>
-        <Text style={[styles.slotLabel, { color: colors.textMuted }]}>
-          {label}
-        </Text>
-      </View>
-
-      {disabled ? (
-        <Badge label="Disabled" variant="error" size="sm" />
-      ) : (
-        <Text style={[styles.slotTime, { color: colors.textPrimary }]}>
-          {display}
-        </Text>
-      )}
-
-      <View style={styles.slotDateRow}>
-        <Ionicons name="calendar-outline" size={12} color={colors.textMuted} />
-        <Text style={[styles.slotDate, { color: colors.textSecondary }]}>
-          {date || 'No date set'}
-        </Text>
-      </View>
+    <View style={styles.slot}>
+      <Text style={[styles.slotLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text
+        style={[
+          styles.slotTime,
+          { color: display ? colors.textPrimary : colors.badge.error.text },
+        ]}
+      >
+        {display || 'Disabled'}
+      </Text>
+      <Text style={[styles.slotDate, { color: colors.textSecondary }]}>
+        {date ? formatApiDateLabel(date) : '—'}
+      </Text>
     </View>
   );
 }
@@ -256,39 +188,27 @@ function ActivityCard({ item }: { item: TimerLastActivity }) {
   const when = resolveDateValue(item.timestamp ?? item.createdAt);
 
   return (
-    <View
-      style={[
-        styles.activityCard,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
+    <View style={[styles.activityRow, { borderBottomColor: colors.border }]}>
       <ActivityAvatar uri={item.profile_image} />
       <View style={styles.activityBody}>
-        <View style={styles.activityTop}>
-          <Text
-            style={[styles.activityName, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            {item.name || item.email || 'Unknown'}
-          </Text>
-          <Text style={[styles.activityTime, { color: colors.textMuted }]}>
-            {formatDateTimeIST(when)}
-          </Text>
-        </View>
+        <Text
+          style={[styles.activityName, { color: colors.textPrimary }]}
+          numberOfLines={1}
+        >
+          {item.name || item.email || 'Unknown'}
+        </Text>
         {item.email ? (
           <Text
-            style={[styles.activityEmail, { color: colors.textMuted }]}
+            style={[styles.activityMeta, { color: colors.textMuted }]}
             numberOfLines={1}
           >
             {item.email}
           </Text>
         ) : null}
-        <ActivityDetails
-          html={item.details || item.message || item.action}
-        />
+        <Text style={[styles.activityMeta, { color: colors.textSecondary }]}>
+          {formatDateTimeIST(when)}
+        </Text>
+        <ActivityDetails html={item.details || item.message || item.action} />
       </View>
     </View>
   );
@@ -300,11 +220,44 @@ export function TimerDetailModal({ visible, timer, onClose }: Props) {
 
   useStatusBarOverlay(visible);
 
-  const activities = useMemo(
+  const [older, setOlder] = useState<TimerLastActivity[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
+
+  useEffect(() => {
+    setOlder([]);
+    setMoreError('');
+  }, [timer?._id]);
+
+  const initialActivities = useMemo(
     () => normalizeActivities(timer?.last_activity),
     [timer?.last_activity],
   );
+  const activities = useMemo(
+    () => normalizeActivities([...initialActivities, ...older]),
+    [initialActivities, older],
+  );
+  const activityTotal = timer?.activity_count ?? activities.length;
+  const hasMore = activityTotal > activities.length;
+
+  const loadEarlier = async () => {
+    if (!timer || loadingMore) return;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const page = await fetchTimerActivity(timer._id, activities.length);
+      const next = Array.isArray(page.last_activity) ? page.last_activity : [];
+      setOlder((prev) => [...prev, ...next]);
+    } catch (err) {
+      setMoreError(
+        err instanceof Error ? err.message : 'Failed to load activity',
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  };
   const editLocked = timer?.is_available_to_edit === false;
+  const intelligent = timer?.timer_command === '13';
   const createdAt = resolveDateValue(timer?.createdAt);
   const updatedAt = resolveDateValue(timer?.updatedAt);
   const timerUpdatedAt = resolveDateValue(timer?.timer_updated_at);
@@ -338,61 +291,49 @@ export function TimerDetailModal({ visible, timer, onClose }: Props) {
             },
           ]}
         >
-          <View
-            style={[styles.accentBar, { backgroundColor: colors.primary }]}
-          />
-
-          <View style={styles.header}>
-            <View style={styles.headerTop}>
-              <View
-                style={[
-                  styles.iconWrap,
-                  { backgroundColor: colors.badge.success.bg },
-                ]}
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <View style={styles.headerText}>
+              <Text
+                style={[styles.title, { color: colors.textPrimary }]}
+                numberOfLines={1}
               >
-                <Ionicons
-                  name="timer-outline"
-                  size={18}
-                  color={colors.primary}
+                {timer.block || 'Timer'}
+              </Text>
+              <Text
+                style={[styles.subtitle, { color: colors.textMuted }]}
+                numberOfLines={1}
+              >
+                {timer.site_id || '—'}
+                {' · '}
+                {timer.total_robots_in_block ?? 0} robots
+                {' · '}
+                {timer.max_cleaning_time ?? 0} min
+                {' · '}
+                {activityTotal} changes
+              </Text>
+              <View style={styles.badgeRow}>
+                <Badge
+                  label={intelligent ? 'Intelligent' : 'Normal'}
+                  variant={intelligent ? 'warning' : 'success'}
+                  size="sm"
+                />
+                <Badge
+                  label={editLocked ? 'Locked' : 'Editable'}
+                  variant={editLocked ? 'error' : 'success'}
+                  size="sm"
                 />
               </View>
-              <View style={styles.headerText}>
-                <Text style={[styles.eyebrow, { color: colors.textMuted }]}>
-                  Block schedule
-                </Text>
-                <Text
-                  style={[styles.title, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
-                  {timer.block || 'Timer details'}
-                </Text>
-                <View style={styles.badgeRow}>
-                  <Badge
-                    label={timer.site_id || '—'}
-                    variant="info"
-                    size="sm"
-                  />
-                  <Badge
-                    label={editLocked ? 'Edit locked' : 'Editable'}
-                    variant={editLocked ? 'error' : 'success'}
-                    size="sm"
-                  />
-                  {timer.is_timer_updated ? (
-                    <Badge label="Updated" variant="warning" size="sm" />
-                  ) : null}
-                </View>
-              </View>
-              <Pressable
-                onPress={onClose}
-                hitSlop={8}
-                style={[
-                  styles.closeBtn,
-                  { backgroundColor: colors.backgroundTertiary },
-                ]}
-              >
-                <Ionicons name="close" size={18} color={colors.textPrimary} />
-              </Pressable>
             </View>
+            <Pressable
+              onPress={onClose}
+              hitSlop={8}
+              style={[
+                styles.closeBtn,
+                { backgroundColor: colors.backgroundTertiary },
+              ]}
+            >
+              <Ionicons name="close" size={18} color={colors.textPrimary} />
+            </Pressable>
           </View>
 
           <ScrollView
@@ -400,106 +341,37 @@ export function TimerDetailModal({ visible, timer, onClose }: Props) {
             contentContainerStyle={styles.bodyContent}
             showsVerticalScrollIndicator={false}
           >
-            <View style={styles.metricsRow}>
-              <MetricTile
-                icon="hardware-chip-outline"
-                label="Robots"
-                value={String(timer.total_robots_in_block ?? 0)}
-                color={colors.textPrimary}
-              />
-              <MetricTile
-                icon="hourglass-outline"
-                label="Max min"
-                value={String(timer.max_cleaning_time ?? 0)}
-                color={colors.primary}
-              />
-              <MetricTile
-                icon="git-commit-outline"
-                label="Changes"
-                value={String(activities.length)}
-                color={colors.badge.info.text}
-              />
-            </View>
-
-            <View style={styles.section}>
-              <Text
-                style={[styles.sectionTitle, { color: colors.textPrimary }]}
-              >
-                Cleaning timers
-              </Text>
-              <View style={styles.slotsCol}>
-                <TimerSlotCard
-                  label="Timer 1"
-                  time={timer.timer1}
-                  date={timer.timer1_date}
-                />
-                <TimerSlotCard
-                  label="Timer 2"
-                  time={timer.timer2}
-                  date={timer.timer2_date}
-                />
-                <TimerSlotCard
-                  label="Timer 3"
-                  time={timer.timer3}
-                  date={timer.timer3_date}
-                />
-              </View>
+            <View
+              style={[
+                styles.slotsRow,
+                {
+                  backgroundColor: colors.backgroundSecondary,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <TimerSlot label="T1" time={timer.timer1} date={timer.timer1_date} />
+              <View style={[styles.slotDivider, { backgroundColor: colors.border }]} />
+              <TimerSlot label="T2" time={timer.timer2} date={timer.timer2_date} />
+              <View style={[styles.slotDivider, { backgroundColor: colors.border }]} />
+              <TimerSlot label="T3" time={timer.timer3} date={timer.timer3_date} />
             </View>
 
             {createdAt || updatedAt || timerUpdatedAt ? (
-              <View
-                style={[
-                  styles.metaCard,
-                  {
-                    backgroundColor: colors.backgroundSecondary,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
+              <View style={styles.metaBlock}>
                 {createdAt ? (
-                  <View style={styles.metaRow}>
-                    <Text style={[styles.metaKey, { color: colors.textMuted }]}>
-                      Created
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metaValue,
-                        { color: colors.textSecondary },
-                      ]}
-                    >
-                      {formatDateTimeIST(createdAt)}
-                    </Text>
-                  </View>
-                ) : null}
-                {updatedAt ? (
-                  <View style={styles.metaRow}>
-                    <Text style={[styles.metaKey, { color: colors.textMuted }]}>
-                      Updated
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metaValue,
-                        { color: colors.textSecondary },
-                      ]}
-                    >
-                      {formatDateTimeIST(updatedAt)}
-                    </Text>
-                  </View>
+                  <Text style={[styles.metaLine, { color: colors.textMuted }]}>
+                    Created {formatDateTimeIST(createdAt)}
+                  </Text>
                 ) : null}
                 {timerUpdatedAt ? (
-                  <View style={styles.metaRow}>
-                    <Text style={[styles.metaKey, { color: colors.textMuted }]}>
-                      Last timer change
-                    </Text>
-                    <Text
-                      style={[
-                        styles.metaValue,
-                        { color: colors.textSecondary },
-                      ]}
-                    >
-                      {formatDateTimeIST(timerUpdatedAt)}
-                    </Text>
-                  </View>
+                  <Text style={[styles.metaLine, { color: colors.textMuted }]}>
+                    Last change {formatDateTimeIST(timerUpdatedAt)}
+                  </Text>
+                ) : updatedAt ? (
+                  <Text style={[styles.metaLine, { color: colors.textMuted }]}>
+                    Updated {formatDateTimeIST(updatedAt)}
+                  </Text>
                 ) : null}
               </View>
             ) : null}
@@ -511,9 +383,13 @@ export function TimerDetailModal({ visible, timer, onClose }: Props) {
                 >
                   Activity history
                 </Text>
-                {activities.length > 0 ? (
+                {activityTotal > 0 ? (
                   <Badge
-                    label={`${activities.length}`}
+                    label={
+                      hasMore
+                        ? `${activities.length}/${activityTotal}`
+                        : `${activityTotal}`
+                    }
                     variant="neutral"
                     size="sm"
                   />
@@ -549,26 +425,22 @@ export function TimerDetailModal({ visible, timer, onClose }: Props) {
                   />
                 ))
               )}
+              {hasMore ? (
+                <Button
+                  title={loadingMore ? 'Loading...' : 'Load earlier activity'}
+                  variant="outline"
+                  size="sm"
+                  onPress={() => void loadEarlier()}
+                  loading={loadingMore}
+                />
+              ) : null}
+              {moreError ? (
+                <Text style={[styles.moreError, { color: colors.danger }]}>
+                  {moreError}
+                </Text>
+              ) : null}
             </View>
           </ScrollView>
-
-          <View
-            style={[
-              styles.footer,
-              {
-                borderTopColor: colors.border,
-                backgroundColor: colors.surface,
-              },
-            ]}
-          >
-            <Button
-              title="Close"
-              variant="outline"
-              onPress={onClose}
-              fullWidth
-              icon="checkmark-outline"
-            />
-          </View>
         </View>
       </View>
     </Modal>
@@ -582,7 +454,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   panel: {
-    maxHeight: '92%',
+    height: '88%',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
     overflow: 'hidden',
@@ -591,42 +463,26 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 16,
   },
-  accentBar: {
-    height: 3,
-    width: '100%',
-  },
   header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-  },
-  headerTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerText: {
     flex: 1,
     gap: 4,
   },
-  eyebrow: {
-    ...typography.caption,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
   title: {
-    ...typography.label,
-    fontSize: 18,
+    ...typography.h2,
     fontWeight: '700',
+  },
+  subtitle: {
+    ...typography.caption,
+    fontSize: 11,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -642,38 +498,58 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bodyScroll: {
-    flexGrow: 0,
+    flex: 1,
   },
   bodyContent: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    padding: spacing.md,
     gap: spacing.md,
+    paddingBottom: spacing.lg,
   },
-  metricsRow: {
+  slotsRow: {
     flexDirection: 'row',
-    gap: spacing.xs,
-  },
-  metricTile: {
-    flex: 1,
+    alignItems: 'center',
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    alignItems: 'center',
-    gap: 4,
   },
-  metricValue: {
-    ...typography.label,
-    fontSize: 15,
+  slot: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  slotDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+  },
+  slotLabel: {
+    ...typography.caption,
+    fontSize: 10,
     fontWeight: '700',
   },
-  metricLabel: {
+  slotTime: {
+    ...typography.label,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  slotDate: {
     ...typography.caption,
-    fontSize: 9,
-    textTransform: 'uppercase',
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+  metaBlock: {
+    gap: 2,
+  },
+  metaLine: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 16,
   },
   section: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -684,71 +560,8 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.label,
     fontSize: 13,
+    lineHeight: 18,
     fontWeight: '700',
-  },
-  slotsCol: {
-    gap: spacing.sm,
-  },
-  slotCard: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.xs,
-  },
-  slotHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  slotIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotLabel: {
-    ...typography.caption,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
-  slotTime: {
-    ...typography.label,
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  slotDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  slotDate: {
-    ...typography.bodySmall,
-    fontSize: 12,
-  },
-  metaCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  metaKey: {
-    ...typography.caption,
-    fontSize: 11,
-  },
-  metaValue: {
-    ...typography.bodySmall,
-    fontSize: 12,
-    flexShrink: 1,
-    textAlign: 'right',
   },
   emptyActivity: {
     borderWidth: StyleSheet.hairlineWidth,
@@ -758,21 +571,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  moreError: {
+    ...typography.caption,
+    textAlign: 'center',
+  },
   emptyActivityText: {
     ...typography.bodySmall,
     flex: 1,
   },
-  activityCard: {
+  activityRow: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   activityAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginTop: 2,
   },
   activityAvatarFallback: {
     alignItems: 'center',
@@ -780,38 +598,23 @@ const styles = StyleSheet.create({
   },
   activityBody: {
     flex: 1,
-    gap: 4,
-  },
-  activityTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: 2,
   },
   activityName: {
     ...typography.label,
     fontSize: 13,
-    flex: 1,
+    lineHeight: 18,
+    fontWeight: '700',
   },
-  activityTime: {
-    ...typography.caption,
-    fontSize: 10,
-    textAlign: 'right',
-    maxWidth: 110,
-  },
-  activityEmail: {
+  activityMeta: {
     ...typography.caption,
     fontSize: 11,
+    lineHeight: 15,
   },
   activityDetails: {
     ...typography.bodySmall,
     fontSize: 12,
-    lineHeight: 18,
-  },
-  footer: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
+    lineHeight: 17,
+    marginTop: 2,
   },
 });

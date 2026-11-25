@@ -6,8 +6,8 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import * as SecureStore from "expo-secure-store";
 import { API_BASE_URL } from "../config/api";
+import { getDeviceItem, setDeviceItem } from "../utils/deviceStore";
 import { User } from "../types/auth";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { clearAuthToken, getAuthToken, setAuthToken, apiFetch } from "../api/client";
@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const [stored, token] = await Promise.all([
-          SecureStore.getItemAsync(USER_STORAGE_KEY),
+          getDeviceItem(USER_STORAGE_KEY),
           getAuthToken(),
         ]);
 
@@ -174,10 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setAuthToken(token);
 
     setUser(loggedInUser);
-    await SecureStore.setItemAsync(
-      USER_STORAGE_KEY,
-      JSON.stringify(loggedInUser),
-    );
+    await setDeviceItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));
   }, []);
 
   const signOut = useCallback(async () => {
@@ -200,11 +197,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = useCallback(async (next: User) => {
     setUser(next);
-    await SecureStore.setItemAsync(USER_STORAGE_KEY, JSON.stringify(next));
+    await setDeviceItem(USER_STORAGE_KEY, JSON.stringify(next));
   }, []);
 
   const refreshUser = useCallback(async () => {
-    const stored = await SecureStore.getItemAsync(USER_STORAGE_KEY);
+    const stored = await getDeviceItem(USER_STORAGE_KEY);
     if (!stored) return null;
 
     const current = JSON.parse(stored) as User;

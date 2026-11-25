@@ -23,9 +23,15 @@ type Bucket = {
 type Props = {
   robots: SiteRobot[];
   onViewAll?: () => void;
+  /** Headline counts already shown elsewhere on the dashboard. */
+  showTotals?: boolean;
 };
 
-export function RobotBatterySummary({ robots, onViewAll }: Props) {
+export function RobotBatterySummary({
+  robots,
+  onViewAll,
+  showTotals = true,
+}: Props) {
   const { colors } = useTheme();
 
   const summary = useMemo(() => {
@@ -82,7 +88,7 @@ export function RobotBatterySummary({ robots, onViewAll }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.summaryRow}>
+      {showTotals ? <View style={styles.summaryRow}>
         <View
           style={[
             styles.summaryItem,
@@ -122,7 +128,7 @@ export function RobotBatterySummary({ robots, onViewAll }: Props) {
             Low battery
           </Text>
         </View>
-      </View>
+      </View> : null}
 
       <Text style={[styles.distributionTitle, { color: colors.textSecondary }]}>
         Battery distribution
@@ -171,7 +177,6 @@ export function RobotBatterySummary({ robots, onViewAll }: Props) {
                 key={robot.robot_no}
                 style={[
                   styles.previewRow,
-                  { borderBottomColor: colors.border },
                 ]}
               >
                 <Text style={[styles.previewId, { color: colors.textPrimary }]}>
@@ -203,7 +208,6 @@ export function RobotBatterySummary({ robots, onViewAll }: Props) {
           accessibilityLabel={`View all ${robots.length} robots`}
           style={({ pressed }) => [
             styles.viewAllButton,
-            { borderColor: colors.primary },
             pressed && styles.viewAllPressed,
           ]}
         >
@@ -285,7 +289,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: spacing.xs,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   previewId: {
     ...typography.bodySmall,
@@ -306,8 +309,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.xs,
-    borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     paddingVertical: spacing.sm,
   },
   viewAllPressed: {

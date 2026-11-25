@@ -1,5 +1,9 @@
-import * as SecureStore from 'expo-secure-store';
 import { API_BASE_URL } from '../config/api';
+import {
+  deleteDeviceItem,
+  getDeviceItem,
+  setDeviceItem,
+} from '../utils/deviceStore';
 import { fetchWithTimeout } from '../utils/fetchWithTimeout';
 import {
   isSessionExpiredPayload,
@@ -13,15 +17,15 @@ import {
 const TOKEN_STORAGE_KEY = 'taypro_auth_token';
 
 export async function getAuthToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_STORAGE_KEY);
+  return getDeviceItem(TOKEN_STORAGE_KEY);
 }
 
 export async function setAuthToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(TOKEN_STORAGE_KEY, token);
+  await setDeviceItem(TOKEN_STORAGE_KEY, token);
 }
 
 export async function clearAuthToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
+  await deleteDeviceItem(TOKEN_STORAGE_KEY);
 }
 
 async function checkSessionExpired(response: Response): Promise<void> {

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
   Platform,
   Pressable,
@@ -9,11 +8,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import {
   CleaningLogTableHeader,
   CleaningLogTableRow,
@@ -21,7 +21,6 @@ import {
 } from '../components/cleaningLogs/CleaningLogTableRow';
 import { Navbar } from '../components/layout';
 import { ScreenError, SubscriptionBlockedPage } from '../components/subscription/SubscriptionExpiryCard';
-import { Input } from '../components/ui';
 import { fetchCleaningLogsForDay } from '../api/cleaningLogs';
 import { asLoadError, isSubscriptionError, type SubscriptionError } from '../utils/subscription';
 import { useTheme } from '../theme';
@@ -46,17 +45,95 @@ import { appAlert } from '../utils/appAlert';
 import { SitesStackParamList } from '../navigation/SitesStack';
 
 type Route = RouteProp<SitesStackParamList, 'SiteCleaningLogs'>;
+type LogRow = CleaningLogRecord | NotStartedRobot | OfflineRobotLog | DprRecord;
 
-type ListItem = CleaningLogRecord | NotStartedRobot | OfflineRobotLog | DprRecord;
+const TABLE_TABS: { id: CleaningLogCategory; label: string }[] = [
+  { id: 'completed', label: 'Completed' },
+  { id: 'inprogress', label: 'In Progress' },
+  { id: 'failure', label: 'Failed' },
+  { id: 'not_started', label: 'Not Started' },
+  { id: 'offline', label: 'Offline' },
+  { id: 'dpr', label: 'DPR' },
+];
 
-function toDateInputValue(date: Date) {
-  return date.toISOString().slice(0, 10);
+function rowsFor(data: CleaningLogsForDay, category: CleaningLogCategory): LogRow[] {
+  if (category === 'completed') return data.cleaning_completed || [];
+  if (category === 'inprogress') return data.cleaning_in_progress || [];
+  if (category === 'failure') return data.cleaning_failures || [];
+  if (category === 'not_started') return data.not_started_robots || [];
+  if (category === 'dpr') return data.dpr || [];
+  return data.offline_robots_at_time_of_cleaning || [];
 }
 
-function shiftDate(value: string, days: number) {
-  const date = new Date(value);
-  date.setDate(date.getDate() + days);
-  return toDateInputValue(date);
+function sortRows(rows: LogRow[], category: CleaningLogCategory) {
+  if (category === 'dpr') return rows;
+  return [...rows].sort((a, b) => {
+    const aNo = 'robot_no' in a && a.robot_no ? String(a.robot_no) : '';
+    const bNo = 'robot_no' in b && b.robot_no ? String(b.robot_no) : '';
+    return aNo.localeCompare(bNo, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+function duplicateRobotNos(rows: LogRow[]) {
+  const counts = new Map<string, number>();
+  for (const item of rows) {
+    if (!('robot_no' in item) || !item.robot_no) continue;
+    const key = String(item.robot_no).trim();
+    if (!key) continue;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const duplicates = new Set<string>();
+  for (const [robotNo, count] of counts) {
+    if (count > 1) duplicates.add(robotNo);
+  }
+  return duplicates;
+}
+
+function rowMatches(item: LogRow, category: CleaningLogCategory, query: string) {
+  if (category === 'dpr') {
+    const record = item as DprRecord;
+    return matchesCleaningSearch(query, [
+      record.site_id,
+      record.comments,
+      getDprTechnicianName(record),
+      getDprTechnicianEmail(record),
+      formatTechnicianNames(record.technician_present),
+      record.report_date,
+      record.new_report_date,
+    ]);
+  }
+  if ('last_uplink' in item && !('error_type' in item)) {
+    const robot = item as NotStartedRobot;
+    return matchesCleaningSearch(query, [
+      robot.robot_no,
+      robot.block,
+      robot.last_uplink,
+      robot.lora_state,
+    ]);
+  }
+  if ('error_type' in item) {
+    const offline = item as OfflineRobotLog;
+    return matchesCleaningSearch(query, [
+      offline.robot_no,
+      offline.block,
+      offline.error_type,
+    ]);
+  }
+  const record = item as CleaningLogRecord;
+  return matchesCleaningSearch(query, [
+    record.robot_no,
+    record.block,
+    record.comments,
+    record.row_no,
+    record.row_length,
+  ]);
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDisplayDate(value: string) {
@@ -70,71 +147,6 @@ function formatDisplayDate(value: string) {
   });
 }
 
-function SummaryStrip({
-  assigned,
-  completed,
-  inProgress,
-  failed,
-  notStarted,
-  offline,
-}: {
-  assigned: number;
-  completed: number;
-  inProgress: number;
-  failed: number;
-  notStarted: number;
-  offline: number;
-}) {
-  const { colors } = useTheme();
-
-  const items = [
-    { label: 'Assigned', value: assigned, color: colors.textPrimary },
-    { label: 'Completed', value: completed, color: colors.primary },
-    { label: 'Progress', value: inProgress, color: colors.badge.warning.text },
-    { label: 'Failed', value: failed, color: colors.danger },
-    { label: 'Not Started', value: notStarted, color: colors.badge.info.text },
-    { label: 'Offline', value: offline, color: colors.textMuted },
-  ];
-
-  const rows = [items.slice(0, 3), items.slice(3)];
-
-  return (
-    <View
-      style={[
-        styles.summaryStrip,
-        {
-          backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
-        },
-      ]}
-    >
-      {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex}
-          style={[
-            styles.summaryRow,
-            rowIndex > 0 && {
-              borderTopWidth: StyleSheet.hairlineWidth,
-              borderTopColor: colors.border,
-            },
-          ]}
-        >
-          {row.map((item) => (
-            <View key={item.label} style={styles.summaryCell}>
-              <Text style={[styles.summaryValue, { color: item.color }]}>
-                {item.value}
-              </Text>
-              <Text style={[styles.summaryLabel, { color: colors.textMuted }]}>
-                {item.label}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export function CleaningLogsScreen() {
   const { colors, isDark } = useTheme();
   const navigation = useNavigation();
@@ -146,172 +158,108 @@ export function CleaningLogsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | SubscriptionError>('');
-  const [category, setCategory] = useState<CleaningLogCategory>('completed');
-  const [search, setSearch] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('completed');
+  const [search, setSearch] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   const selectedDateValue = useMemo(
     () => new Date(`${date}T12:00:00`),
     [date],
   );
 
-  const loadLogs = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      setError('');
+  const loadLogs = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError('');
 
-      try {
-        const result = await fetchCleaningLogsForDay(siteId, date);
-        setData(result);
-      } catch (err) {
-        setData(null);
-        setError(asLoadError(err, 'Failed to load cleaning logs'));
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [siteId, date],
-  );
+    try {
+      const result = await fetchCleaningLogsForDay(siteId, date);
+      setData(result);
+    } catch (err) {
+      setData(null);
+      setError(asLoadError(err, 'Failed to load cleaning logs'));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [siteId, date]);
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
 
-  const categories = useMemo(
-    () => [
-      {
-        id: 'completed' as const,
-        label: 'Completed',
-        count: data?.total_cleaning_completed ?? 0,
-      },
-      {
-        id: 'inprogress' as const,
-        label: 'In Progress',
-        count: data?.total_cleaning_in_progress ?? 0,
-      },
-      {
-        id: 'failure' as const,
-        label: 'Failed',
-        count: data?.total_failure_logs ?? 0,
-      },
-      {
-        id: 'not_started' as const,
-        label: 'Not Started',
-        count: data?.total_not_started_robots ?? 0,
-      },
-      {
-        id: 'offline' as const,
-        label: 'Offline',
-        count: data?.total_offline_robots_at_time_of_cleaning ?? 0,
-      },
-      {
-        id: 'dpr' as const,
-        label: 'Technician DPR',
-        count: data?.dpr?.length ?? 0,
-      },
-    ],
-    [data],
+  useFocusEffect(
+    useCallback(() => {
+      if (!autoRefresh) return;
+      const timer = setInterval(() => {
+        void loadLogs(true);
+      }, 60_000);
+      return () => clearInterval(timer);
+    }, [autoRefresh, loadLogs]),
   );
 
-  const rawListData = useMemo((): ListItem[] => {
+  const tabs = useMemo(
+    () => [
+      {
+        id: 'assigned',
+        label: 'Assigned',
+        count: data?.total_robots_assigned ?? 0,
+        color: colors.textPrimary,
+      },
+      {
+        id: 'completed',
+        label: 'Completed',
+        count: data?.total_cleaning_completed ?? 0,
+        color: colors.primary,
+      },
+      {
+        id: 'inprogress',
+        label: 'In Progress',
+        count: data?.total_cleaning_in_progress ?? 0,
+        color: colors.badge.warning.text,
+      },
+      {
+        id: 'failure',
+        label: 'Failed',
+        count: data?.total_failure_logs ?? 0,
+        color: colors.danger,
+      },
+      {
+        id: 'not_started',
+        label: 'Not Started',
+        count: data?.total_not_started_robots ?? 0,
+        color: colors.badge.info.text,
+      },
+      {
+        id: 'offline',
+        label: 'Offline',
+        count: data?.total_offline_robots_at_time_of_cleaning ?? 0,
+        color: colors.textMuted,
+      },
+      {
+        id: 'dpr',
+        label: 'DPR',
+        count: data?.dpr?.length ?? 0,
+        color: colors.textSecondary,
+      },
+    ],
+    [colors, data],
+  );
+
+  const tables = useMemo(() => {
     if (!data) return [];
-    let list: ListItem[];
-    if (category === 'completed') list = data.cleaning_completed;
-    else if (category === 'inprogress') list = data.cleaning_in_progress;
-    else if (category === 'failure') list = data.cleaning_failures;
-    else if (category === 'not_started') list = data.not_started_robots;
-    else if (category === 'dpr') list = data.dpr;
-    else list = data.offline_robots_at_time_of_cleaning;
-
-    if (category === 'dpr') return list;
-
-    return [...list].sort((a, b) => {
-      const aNo = 'robot_no' in a && a.robot_no ? String(a.robot_no) : '';
-      const bNo = 'robot_no' in b && b.robot_no ? String(b.robot_no) : '';
-      return aNo.localeCompare(bNo, undefined, { numeric: true, sensitivity: 'base' });
+    return TABLE_TABS.map((tab) => {
+      const rows = sortRows(rowsFor(data, tab.id), tab.id);
+      return {
+        ...tab,
+        rows,
+        duplicates: duplicateRobotNos(rows),
+        width: getTableWidth(tab.id),
+      };
     });
-  }, [category, data]);
-
-  const tableWidth = getTableWidth(category);
-
-  const filteredListData = useMemo(() => {
-    const query = search.trim();
-    if (!query) return rawListData;
-
-    return rawListData.filter((item) => {
-      if (category === 'dpr') {
-        const record = item as DprRecord;
-        return matchesCleaningSearch(query, [
-          record.site_id,
-          record.comments,
-          getDprTechnicianName(record),
-          getDprTechnicianEmail(record),
-          formatTechnicianNames(record.technician_present),
-          record.report_date,
-          record.new_report_date,
-          record.robots_operational_details?.ready_for_operational,
-          record.robots_operational_details?.online_operational,
-          record.robots_operational_details?.manual_operational,
-          record.robots_operational_details?.unoperational,
-          record.robots_operational_details?.robots_uptime,
-        ]);
-      }
-
-      if ('cleaning' in item || ('comments' in item && 'row_length' in item)) {
-        const record = item as CleaningLogRecord;
-        return matchesCleaningSearch(query, [
-          record.robot_no,
-          record.block,
-          record.comments,
-          record.row_no,
-          record.row_length,
-          record.cleaning?.battery_before_cleaning,
-          record.cleaning?.battery_after_cleaning,
-          record.cleaning?.startAt,
-          record.cleaning?.finishAt,
-        ]);
-      }
-
-      if ('last_uplink' in item) {
-        const robot = item as NotStartedRobot;
-        return matchesCleaningSearch(query, [
-          robot.robot_no,
-          robot.block,
-          robot.last_uplink,
-          robot.lora_state,
-        ]);
-      }
-
-      const offline = item as OfflineRobotLog;
-      return matchesCleaningSearch(query, [
-        offline.robot_no,
-        offline.block,
-        offline.error_type,
-        offline.createdAt,
-      ]);
-    });
-  }, [rawListData, search, category]);
-
-  const duplicateRobotNos = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of rawListData) {
-      if (!('robot_no' in item) || !item.robot_no) continue;
-      const key = String(item.robot_no).trim();
-      if (!key) continue;
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-    const duplicates = new Set<string>();
-    for (const [robotNo, count] of counts) {
-      if (count > 1) duplicates.add(robotNo);
-    }
-    return duplicates;
-  }, [rawListData]);
+  }, [data]);
 
   const applyPickedDate = useCallback((picked?: Date) => {
     if (!picked) return;
@@ -321,19 +269,6 @@ export function CleaningLogsScreen() {
   const closeDatePicker = useCallback(() => {
     setShowDatePicker(false);
   }, []);
-
-  const renderItem = ({ item, index }: { item: ListItem; index: number }) => {
-    const robotNo =
-      'robot_no' in item && item.robot_no ? String(item.robot_no).trim() : '';
-    return (
-      <CleaningLogTableRow
-        item={item}
-        index={index + 1}
-        category={category}
-        highlightRobotNo={Boolean(robotNo && duplicateRobotNos.has(robotNo))}
-      />
-    );
-  };
 
   const hasExportableData = useMemo(() => {
     if (!data) return false;
@@ -377,158 +312,6 @@ export function CleaningLogsScreen() {
     }
   }, [data, date, exporting, hasExportableData, siteId, siteName]);
 
-  const dateSelector = (
-    <View style={styles.dateBar}>
-      <View style={styles.dateRow}>
-        <Pressable
-          onPress={() => setDate((current) => shiftDate(current, -1))}
-          style={[
-            styles.dateButton,
-            { backgroundColor: colors.backgroundTertiary },
-          ]}
-        >
-          <Ionicons name="chevron-back" size={18} color={colors.textPrimary} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => setShowDatePicker(true)}
-          style={[
-            styles.datePill,
-            {
-              backgroundColor: colors.backgroundSecondary,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-          <View style={styles.datePillText}>
-            <Text style={[styles.dateText, { color: colors.textPrimary }]}>
-              {formatDisplayDate(date)}
-            </Text>
-            <Text style={[styles.dateSubText, { color: colors.textMuted }]}>
-              Tap to pick date · {data?.total_cleaning_logs ?? 0} logs
-            </Text>
-          </View>
-          <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-        </Pressable>
-
-        <Pressable
-          onPress={() => {
-            const next = shiftDate(date, 1);
-            if (next <= toDateInputValue(new Date())) {
-              setDate(next);
-            }
-          }}
-          style={[
-            styles.dateButton,
-            { backgroundColor: colors.backgroundTertiary },
-          ]}
-        >
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={colors.textPrimary}
-          />
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  const controlsHeader = (
-    <View style={styles.headerContent}>
-      {data ? (
-        <SummaryStrip
-          assigned={data.total_robots_assigned}
-          completed={data.total_cleaning_completed}
-          inProgress={data.total_cleaning_in_progress}
-          failed={data.total_failure_logs}
-          notStarted={data.total_not_started_robots}
-          offline={data.total_offline_robots_at_time_of_cleaning}
-        />
-      ) : null}
-
-      <Input
-        placeholder={
-          category === 'dpr'
-            ? 'Search site, remarks, technician...'
-            : 'Search robot, block, status...'
-        }
-        value={search}
-        onChangeText={setSearch}
-        leftIcon="search-outline"
-        style={styles.searchInput}
-      />
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryRow}
-      >
-        {categories.map((item) => {
-          const active = category === item.id;
-          return (
-            <Pressable
-              key={item.id}
-              onPress={() => setCategory(item.id)}
-              style={[
-                styles.categoryChip,
-                {
-                  backgroundColor: active
-                    ? colors.backgroundTertiary
-                    : 'transparent',
-                  borderColor: active ? colors.primary : colors.border,
-                },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.categoryText,
-                  { color: active ? colors.primary : colors.textSecondary },
-                ]}
-              >
-                {item.label}
-              </Text>
-              <Text
-                style={[
-                  styles.categoryCount,
-                  { color: active ? colors.primary : colors.textMuted },
-                ]}
-              >
-                {item.count}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <View style={styles.resultRow}>
-        <Text style={[styles.resultCount, { color: colors.textMuted }]}>
-          {filteredListData.length} of {rawListData.length} records
-        </Text>
-        <Pressable
-          onPress={() => void onExportPdf()}
-          disabled={exporting || !hasExportableData}
-          style={[
-            styles.exportBtn,
-            {
-              backgroundColor: colors.primary,
-              opacity: exporting || !hasExportableData ? 0.45 : 1,
-            },
-          ]}
-        >
-          {exporting ? (
-            <ActivityIndicator size="small" color="#04120F" />
-          ) : (
-            <Ionicons name="download-outline" size={16} color="#04120F" />
-          )}
-          <Text style={styles.exportBtnText}>
-            {exporting ? 'Downloading…' : 'Download PDF'}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-
   const datePicker = showDatePicker ? (
     Platform.OS === 'ios' ? (
       <Modal transparent animationType="slide" visible={showDatePicker}>
@@ -540,15 +323,12 @@ export function CleaningLogsScreen() {
           <View
             style={[
               styles.datePickerSheet,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                borderColor: colors.border,
-              },
+              { backgroundColor: colors.backgroundSecondary },
             ]}
           >
             <View style={styles.datePickerHeader}>
               <Text style={[styles.datePickerTitle, { color: colors.textPrimary }]}>
-                Select Date
+                Select date
               </Text>
               <Pressable onPress={closeDatePicker}>
                 <Text style={[styles.datePickerDone, { color: colors.primary }]}>
@@ -612,73 +392,211 @@ export function CleaningLogsScreen() {
         }
       />
 
-      {dateSelector}
-
-      {loading ? (
-        <View style={styles.centerState}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.stateText, { color: colors.textSecondary }]}>
-            Loading cleaning logs...
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void loadLogs(true)}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        <View style={styles.dateRow}>
+        <Pressable
+          onPress={() => {
+            if (Platform.OS !== 'web') setShowDatePicker(true);
+          }}
+          style={[
+            styles.dateField,
+            { backgroundColor: colors.backgroundSecondary },
+          ]}
+        >
+          <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+          <Text style={[styles.dateText, { color: colors.textPrimary }]}>
+            {formatDisplayDate(date)}
           </Text>
+          {Platform.OS === 'web'
+            ? React.createElement('input', {
+                type: 'date',
+                value: date,
+                max: toDateInputValue(new Date()),
+                onChange: (event: { target: { value: string } }) => {
+                  if (event.target.value) setDate(event.target.value);
+                },
+                'aria-label': 'Select date',
+                style: {
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: 0,
+                  width: '100%',
+                  height: '100%',
+                  cursor: 'pointer',
+                  border: 'none',
+                },
+              })
+            : null}
+        </Pressable>
+        <Pressable
+          onPress={() => void onExportPdf()}
+          disabled={exporting || !hasExportableData}
+          style={[
+            styles.exportBtn,
+            {
+              backgroundColor: colors.primary,
+              opacity: exporting || !hasExportableData ? 0.45 : 1,
+            },
+          ]}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color="#04120F" />
+          ) : (
+            <Ionicons name="download-outline" size={16} color="#04120F" />
+          )}
+          <Text style={styles.exportBtnText}>
+            {exporting ? 'Downloading…' : 'Download PDF'}
+          </Text>
+        </Pressable>
         </View>
-      ) : error ? (
-        <ScreenError error={error} onRetry={() => void loadLogs()} />
-      ) : (
-        <View style={styles.content}>
-          <View style={styles.controls}>{controlsHeader}</View>
-          <ScrollView
-            horizontal
-            nestedScrollEnabled
-            showsHorizontalScrollIndicator
-            style={styles.tableScroll}
-            contentContainerStyle={styles.tableScrollContent}
-          >
-            <FlatList
-              style={{ width: tableWidth }}
-              data={filteredListData}
-              keyExtractor={(item, index) =>
-                item._id ||
-                ('robot_no' in item ? item.robot_no : undefined) ||
-                `${category}-${index}`
-              }
-              renderItem={renderItem}
-              ListHeaderComponent={
-                <View
-                  style={[
-                    styles.tableCard,
-                    {
-                      backgroundColor: colors.backgroundSecondary,
-                      borderColor: colors.border,
-                      width: tableWidth,
-                    },
-                  ]}
-                >
-                  <CleaningLogTableHeader category={category} />
-                </View>
-              }
-              contentContainerStyle={[
-                filteredListData.length === 0 && styles.emptyListContent,
-              ]}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => loadLogs(true)}
-                  tintColor={colors.primary}
-                  colors={[colors.primary]}
-                />
-              }
-              ListEmptyComponent={
-                <View style={{ width: tableWidth }}>
-                  <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                    No records found for this category on the selected date.
+
+        {loading ? (
+          <View style={styles.centerState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : error ? (
+          <ScreenError error={error} onRetry={() => void loadLogs()} />
+        ) : (
+          <>
+            <View style={styles.tabGrid}>
+              {tabs.map((tab) => {
+                const selectable = tab.id !== 'assigned';
+                const active = selectable && activeTab === tab.id;
+                return (
+                  <Pressable
+                    key={tab.id}
+                    disabled={!selectable}
+                    onPress={() => {
+                      if (selectable) setActiveTab(tab.id);
+                    }}
+                    style={[
+                      styles.tab,
+                      {
+                        backgroundColor: active
+                          ? colors.primary
+                          : colors.backgroundSecondary,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.tabCount,
+                        { color: active ? '#04120F' : tab.color },
+                      ]}
+                    >
+                      {tab.count}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.tabLabel,
+                        { color: active ? '#04120F' : colors.textSecondary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Pressable
+              onPress={() => setAutoRefresh((on) => !on)}
+              style={styles.autoRefreshRow}
+            >
+              <View
+                style={[
+                  styles.autoRefreshBox,
+                  {
+                    borderColor: autoRefresh ? colors.primary : colors.border,
+                    backgroundColor: autoRefresh ? colors.primary : 'transparent',
+                  },
+                ]}
+              >
+                {autoRefresh ? (
+                  <Ionicons name="checkmark" size={14} color="#04120F" />
+                ) : null}
+              </View>
+              <Text style={[styles.autoRefreshLabel, { color: colors.textSecondary }]}>
+                Auto refresh
+              </Text>
+            </Pressable>
+
+            {tables
+              .filter((table) => table.id === activeTab)
+              .map((table) => {
+              const visibleRows = table.rows.filter((item) =>
+                rowMatches(item, table.id, search),
+              );
+              return (
+              <View key={table.id} style={styles.tableSection}>
+                <View style={styles.tableHeading}>
+                  <Text
+                    style={[styles.tableTitle, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {table.label}
                   </Text>
+                  <View
+                    style={[
+                      styles.searchField,
+                      { backgroundColor: colors.backgroundSecondary },
+                    ]}
+                  >
+                    <Ionicons name="search" size={16} color={colors.textMuted} />
+                    <TextInput
+                      value={search}
+                      onChangeText={setSearch}
+                      placeholder="Search"
+                      placeholderTextColor={colors.textMuted}
+                      style={[styles.searchInput, { color: colors.textPrimary }]}
+                    />
+                  </View>
                 </View>
-              }
-            />
-          </ScrollView>
-        </View>
-      )}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ width: table.width }}>
+                    <CleaningLogTableHeader category={table.id} />
+                    {visibleRows.length === 0 ? (
+                      <Text style={[styles.emptyRow, { color: colors.textMuted }]}>
+                        No records
+                      </Text>
+                    ) : (
+                      visibleRows.map((item, index) => {
+                        const robotNo =
+                          'robot_no' in item && item.robot_no
+                            ? String(item.robot_no).trim()
+                            : '';
+                        return (
+                          <CleaningLogTableRow
+                            key={`${table.id}-${item._id || robotNo || index}`}
+                            item={item}
+                            index={index + 1}
+                            category={table.id}
+                            highlightRobotNo={Boolean(robotNo && table.duplicates.has(robotNo))}
+                          />
+                        );
+                      })
+                    )}
+                  </View>
+                </ScrollView>
+              </View>
+              );
+            })}
+          </>
+        )}
+      </ScrollView>
       {datePicker}
     </View>
   );
@@ -688,24 +606,46 @@ const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
   },
-  content: {
+  scroll: {
     flex: 1,
   },
-  dateBar: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
+  body: {
+    padding: spacing.md,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl,
   },
-  controls: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.sm,
-    gap: spacing.sm,
+  tableSection: {
+    gap: spacing.xs,
   },
-  tableScroll: {
+  tableHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  searchField: {
+    width: 148,
+    minHeight: 40,
+    borderRadius: radius.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  searchInput: {
     flex: 1,
+    ...typography.label,
+    fontSize: 14,
+    paddingVertical: spacing.sm,
   },
-  tableScrollContent: {
-    paddingHorizontal: spacing.md,
+  tableTitle: {
+    ...typography.h2,
+    flexShrink: 0,
+    fontWeight: '700',
+  },
+  emptyRow: {
+    ...typography.caption,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   navButton: {
     width: 40,
@@ -714,48 +654,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerContent: {
-    gap: spacing.sm,
-  },
   dateRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
-  dateButton: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  datePill: {
-    flex: 1,
+  dateField: {
+    position: 'relative',
     minHeight: 48,
-    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  datePillText: {
-    flex: 1,
+  dateText: {
+    ...typography.label,
+    fontSize: 15,
   },
   datePickerOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   datePickerBackdrop: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   datePickerSheet: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: 0,
+    borderTopLeftRadius: radius.md,
+    borderTopRightRadius: radius.md,
     paddingBottom: spacing.lg,
   },
   datePickerHeader: {
@@ -775,167 +703,69 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  dateText: {
-    ...typography.label,
-    fontSize: 12,
-  },
-  dateSubText: {
-    ...typography.caption,
-    fontSize: 10,
-    marginTop: 1,
-  },
-  summaryStrip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-  },
-  summaryCell: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    gap: 2,
-  },
-  summaryValue: {
-    ...typography.label,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  summaryLabel: {
-    ...typography.caption,
-    fontSize: 9,
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  dprCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    gap: spacing.xs,
-  },
-  dprTitle: {
-    ...typography.caption,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-    fontSize: 10,
-  },
-  dprRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-  },
-  dprMeta: {
-    ...typography.caption,
-    fontSize: 10,
-  },
-  dprComment: {
-    ...typography.caption,
-    fontSize: 11,
-    lineHeight: 16,
-  },
-  searchInput: {
-    marginBottom: 0,
-  },
-  categoryRow: {
-    gap: spacing.xs,
-    paddingVertical: spacing.xs,
-  },
-  categoryChip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    alignItems: 'center',
-    minWidth: 88,
-  },
-  categoryText: {
-    ...typography.caption,
-    fontSize: 10,
-    fontWeight: '600',
-  },
-  categoryCount: {
-    ...typography.caption,
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 1,
-  },
-  resultCount: {
-    ...typography.caption,
-    flex: 1,
-  },
-  resultRow: {
+  autoRefreshRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  autoRefreshBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  autoRefreshLabel: {
+    ...typography.bodySmall,
+    fontWeight: '600',
+  },
+  tabGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  tab: {
+    width: '22%',
+    flexGrow: 0,
+    flexShrink: 1,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    gap: 2,
+  },
+  tabCount: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  tabLabel: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   exportBtn: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-    minHeight: 34,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    minHeight: 36,
   },
   exportBtnText: {
     ...typography.caption,
     fontWeight: '700',
     color: '#04120F',
   },
-  tableCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: radius.md,
-    borderTopRightRadius: radius.md,
-    overflow: 'hidden',
-  },
-  tableRowShell: {
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  listContent: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxxl,
-  },
-  emptyListContent: {
-    flexGrow: 1,
-  },
   centerState: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
-  },
-  stateText: {
-    ...typography.bodySmall,
-  },
-  errorWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: spacing.xl,
-  },
-  errorCard: {
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    gap: spacing.md,
-  },
-  errorTitle: {
-    ...typography.h3,
-  },
-  errorText: {
-    ...typography.bodySmall,
-    lineHeight: 22,
-  },
-  emptyText: {
-    ...typography.bodySmall,
-    textAlign: 'center',
-    padding: spacing.xl,
+    paddingVertical: spacing.xxl,
   },
 });

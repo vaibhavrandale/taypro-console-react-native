@@ -112,8 +112,10 @@ export function SiteDetailsProvider({ children }: { children: React.ReactNode })
       }
       setSiteDetails(data);
     } catch (err) {
-      setSiteDetails(null);
-      setError(err instanceof Error ? err.message : 'Failed to load site details');
+      if (!isRefresh) {
+        setSiteDetails(null);
+        setError(err instanceof Error ? err.message : 'Failed to load site details');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

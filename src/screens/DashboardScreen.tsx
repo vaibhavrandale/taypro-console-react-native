@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -8,9 +10,8 @@ import {
   Text,
   View,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { Navbar, Screen } from "../components/layout";
 import { RobotBatterySummary } from "../components/dashboard/RobotBatterySummary";
 import { GatewayMapCard } from "../components/dashboard/GatewayMapCard";
@@ -25,11 +26,6 @@ import { getBatteryPercent, isRobotOnline } from "../utils/robot";
 import { appAlert } from "../utils/appAlert";
 import { sendMqttMulticastDownlink } from "../api/robots";
 import { hasUsableWeather } from "../api/weather";
-import {
-  canAccessAnalytics,
-  canAccessClientTickets,
-  canAccessPreventiveMaintenance,
-} from "../utils/roles";
 import type { AssignedSite } from "../types/auth";
 import type { DrawerNavigationProp } from "@react-navigation/drawer";
 import type { CompositeNavigationProp } from "@react-navigation/native";
@@ -49,11 +45,11 @@ function getSiteLabel(site: AssignedSite) {
   return extra.site_name || site.siteName || site.site_id;
 }
 
-function greetingFor(name: string) {
+function greetingFor() {
   const hour = new Date().getHours();
-  const hello =
-    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  return `${hello}, ${name}`;
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
 }
 
 function normalizeGatewayStatus(status?: string | boolean | null): string {
@@ -139,100 +135,91 @@ function SectionHeader({
   );
 }
 
-type KpiTileProps = {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string | number;
-  hint: string;
-  accent: string;
-  valueColor?: string;
-  hintNode?: React.ReactNode;
-};
-
-function KpiTile({
-  icon,
+function Stat({
   label,
   value,
-  hint,
-  accent,
-  valueColor,
-  hintNode,
-}: KpiTileProps) {
-  const { colors } = useTheme();
+  tone,
+  parts,
+}: {
+  label: string;
+  value?: string | number;
+  tone?: string;
+  parts?: { text: string; tone?: string }[];
+}) {
+  const { colors, isDark } = useTheme();
+  const countText = parts
+    ? parts.map((part) => part.text).join("")
+    : String(value ?? "");
+  const valueSize =
+    countText.length >= 9 ? 13 : countText.length >= 6 ? 15 : 17;
   return (
     <View
       style={[
-        styles.kpiTile,
+        styles.stat,
         {
           backgroundColor: colors.backgroundSecondary,
-          borderColor: colors.border,
+          ...Platform.select({
+            ios: {
+              shadowColor: "#101936",
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: isDark ? 0.18 : 0.04,
+              shadowRadius: 2,
+            },
+            android: { elevation: 1 },
+            default: {
+              boxShadow: isDark
+                ? "0 1px 2px rgba(0, 0, 0, 0.18)"
+                : "0 1px 2px rgba(16, 25, 54, 0.04)",
+            },
+          }),
         },
       ]}
     >
-      <View style={[styles.kpiIcon, { backgroundColor: `${accent}22` }]}>
-        <Ionicons name={icon} size={16} color={accent} />
-      </View>
-      <Text style={[styles.kpiLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.kpiValue, { color: valueColor ?? colors.textPrimary }]}>
-        {value}
-      </Text>
-      {hintNode ?? (
-        <Text style={[styles.kpiHint, { color: colors.textSecondary }]} numberOfLines={1}>
-          {hint}
+      {parts ? (
+        <Text
+          style={[styles.statValue, { fontSize: valueSize, lineHeight: valueSize + 2 }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          {parts.map((part, index) => (
+            <Text
+              key={index}
+              style={{ color: part.tone ?? colors.textPrimary }}
+            >
+              {part.text}
+            </Text>
+          ))}
+        </Text>
+      ) : (
+        <Text
+          style={[
+            styles.statValue,
+            { color: tone ?? colors.textPrimary, fontSize: valueSize, lineHeight: valueSize + 2 },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          {value}
         </Text>
       )}
+      <Text
+        style={[styles.statLabel, { color: colors.textSecondary }]}
+        numberOfLines={2}
+      >
+        {label}
+      </Text>
     </View>
   );
 }
 
-type QuickAction = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  accent: string;
-  onPress: () => void;
-};
-
-function QuickActions({ actions }: { actions: QuickAction[] }) {
-  const { colors } = useTheme();
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.quickRow}
-    >
-      {actions.map((action) => (
-        <Pressable
-          key={action.key}
-          onPress={action.onPress}
-          style={[
-            styles.quickTile,
-            {
-              backgroundColor: colors.backgroundSecondary,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <View style={[styles.quickIcon, { backgroundColor: `${action.accent}22` }]}>
-            <Ionicons name={action.icon} size={18} color={action.accent} />
-          </View>
-          <Text
-            style={[styles.quickLabel, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            {action.label}
-          </Text>
-        </Pressable>
-      ))}
-    </ScrollView>
-  );
-}
-
 export function DashboardScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const navigation = useNavigation<DashboardNavigationProp>();
   const [commandSending, setCommandSending] = useState(false);
+  const [siteMenuOpen, setSiteMenuOpen] = useState(false);
 
   const {
     assignedSites,
@@ -246,6 +233,16 @@ export function DashboardScreen() {
   } = useSiteDetails();
 
   const canSendCommands = user?.robot_command_access !== false;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!selectedSite?.site_id) return;
+      const timer = setInterval(() => {
+        refresh();
+      }, 60_000);
+      return () => clearInterval(timer);
+    }, [refresh, selectedSite?.site_id]),
+  );
   const siteRobots = siteDetails?.robots ?? [];
   const siteTitle = selectedSite ? getSiteLabel(selectedSite) : "My Site";
 
@@ -255,6 +252,7 @@ export function DashboardScreen() {
     siteDetails?.gateways.filter(
       (gateway) => getGatewayStatusVariant(gateway.gateway_status) === "success",
     ).length ?? 0;
+  const offlineGateways = (siteDetails?.gateways.length ?? 0) - onlineGateways;
 
   const avgBattery = useMemo(() => {
     if (!siteRobots.length) return null;
@@ -338,98 +336,20 @@ export function DashboardScreen() {
     });
   };
 
-  const openCleaningLog = () => {
-    if (!selectedSite?.site_id) return;
-    navigation.navigate("CleaningLogs", {
-      screen: "SiteCleaningLogs",
-      params: {
-        siteId: selectedSite.site_id,
-        siteName: getSiteLabel(selectedSite),
-      },
-    });
+  const weather = siteDetails?.weather;
+  const weatherReady = weather != null && hasUsableWeather(weather);
+  const batteryTone = (avg: number | null) => {
+    if (avg == null) return undefined;
+    if (avg > 75) return colors.badge.success.text;
+    if (avg < 25) return colors.badge.error.text;
+    return colors.badge.warning.text;
   };
-
-  const quickActions = useMemo<QuickAction[]>(() => {
-    const items: QuickAction[] = [
-      {
-        key: "blocks",
-        label: "Blocks",
-        icon: "grid-outline",
-        accent: "#4F7CFF",
-        onPress: openBlockwise,
-      },
-      {
-        key: "logs",
-        label: "Logs",
-        icon: "list-outline",
-        accent: "#00C9A7",
-        onPress: openCleaningLog,
-      },
-      {
-        key: "tracking",
-        label: "Tracking",
-        icon: "navigate-outline",
-        accent: "#F59E0B",
-        onPress: () =>
-          navigation.navigate("RobotTracking", {
-            siteId: selectedSite?.site_id,
-            siteName: selectedSite ? getSiteLabel(selectedSite) : undefined,
-          }),
-      },
-      {
-        key: "robots",
-        label: "Robots",
-        icon: "hardware-chip-outline",
-        accent: "#8B5CF6",
-        onPress: () => navigation.navigate("Robots"),
-      },
-      {
-        key: "gateways",
-        label: "Gateways",
-        icon: "wifi-outline",
-        accent: "#3B82F6",
-        onPress: () => navigation.navigate("Gateways"),
-      },
-    ];
-    if (canAccessAnalytics(user?.role)) {
-      items.push({
-        key: "analytics",
-        label: "Analytics",
-        icon: "bar-chart-outline",
-        accent: "#E11D48",
-        onPress: () => navigation.navigate("Analytics"),
-      });
-    }
-    if (canAccessClientTickets(user?.role)) {
-      items.push({
-        key: "tickets",
-        label: "Tickets",
-        icon: "ticket-outline",
-        accent: "#0EA5E9",
-        onPress: () => navigation.navigate("ClientTickets"),
-      });
-    }
-    if (canAccessPreventiveMaintenance(user?.role)) {
-      items.push({
-        key: "pm",
-        label: "PM",
-        icon: "build-outline",
-        accent: "#14B8A6",
-        onPress: () => navigation.navigate("PreventiveMaintenance"),
-      });
-    }
-    return items;
-  }, [navigation, selectedSite, user?.role]);
-
-  const heroColors: [string, string] = isDark
-    ? ["#12203F", "#1B2C55"]
-    : ["#0F766E", "#14B8A6"];
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <Navbar
         title="Home"
-        subtitle={selectedSite ? getSiteLabel(selectedSite) : "Dashboard"}
+        subtitle={user?.username || "Dashboard"}
       />
 
       <Screen
@@ -449,10 +369,7 @@ export function DashboardScreen() {
           <View
             style={[
               styles.messageCard,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                borderColor: colors.border,
-              },
+              { backgroundColor: colors.backgroundSecondary },
             ]}
           >
             <Badge label="No Site Assigned" variant="warning" />
@@ -466,91 +383,26 @@ export function DashboardScreen() {
           </View>
         ) : (
           <>
-            <LinearGradient
-              colors={heroColors}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.hero}
-            >
-              <Text style={styles.heroHello}>
-                {greetingFor(user?.username ?? "there")}
+            <View style={styles.greetRow}>
+              <Text style={[styles.welcomeHello, { color: colors.textSecondary }]}>
+                {greetingFor()}
               </Text>
-              <Text style={styles.heroSite} numberOfLines={1}>
-                {siteTitle}
-              </Text>
-              {siteDetails ? (
-                <Text style={styles.heroMeta}>
-                  {onlineRobots}/{siteRobots.length} robots online
-                  {siteDetails.cleaning
-                    ? ` · ${siteDetails.cleaning.completed} cleaned today`
-                    : ""}
-                </Text>
-              ) : null}
-              <View style={styles.heroActions}>
-                <Pressable
-                  onPress={openBlockwise}
-                  style={styles.heroPrimaryBtn}
-                >
-                  <Text style={styles.heroPrimaryText}>View blocks</Text>
-                  <Ionicons name="arrow-forward" size={14} color="#042F2E" />
-                </Pressable>
-                <Pressable
-                  onPress={openEmergencyStopConfirm}
-                  disabled={!canSendCommands || commandSending}
-                  style={[
-                    styles.heroStopBtn,
-                    { opacity: canSendCommands ? 1 : 0.45 },
-                  ]}
-                >
-                  <Ionicons name="stop" size={12} color="#FECACA" />
-                  <Text style={styles.heroStopText}>
-                    {commandSending ? "Sending…" : "Stop all"}
-                  </Text>
-                </Pressable>
-              </View>
-            </LinearGradient>
-
-            {assignedSites.length > 1 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.sitePickerRow}
+              <Pressable
+                onPress={() => setSiteMenuOpen(true)}
+                style={[
+                  styles.siteButton,
+                  { backgroundColor: colors.backgroundSecondary },
+                ]}
               >
-                {assignedSites.map((site) => {
-                  const active = site.site_id === selectedSite?.site_id;
-                  return (
-                    <Pressable
-                      key={site.site_id}
-                      onPress={() => setSelectedSite(site)}
-                      style={[
-                        styles.siteChip,
-                        {
-                          backgroundColor: active
-                            ? colors.primary
-                            : colors.backgroundTertiary,
-                          borderColor: active ? colors.primary : colors.border,
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name="location"
-                        size={11}
-                        color={active ? "#101936" : colors.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.siteChipText,
-                          { color: active ? "#101936" : colors.textPrimary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {getSiteLabel(site)}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            ) : null}
+                <Text
+                  style={[styles.siteButtonText, { color: colors.textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {selectedSite?.site_id ?? "Site"}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+              </Pressable>
+            </View>
 
             {loading ? (
               <View style={styles.centerState}>
@@ -560,10 +412,7 @@ export function DashboardScreen() {
               <View
                 style={[
                   styles.messageCard,
-                  {
-                    backgroundColor: colors.badge.error.bg,
-                    borderColor: colors.danger,
-                  },
+                  { backgroundColor: colors.badge.error.bg },
                 ]}
               >
                 <Ionicons name="alert-circle" size={16} color={colors.danger} />
@@ -576,54 +425,72 @@ export function DashboardScreen() {
               </View>
             ) : siteDetails ? (
               <>
-                {hasUsableWeather(siteDetails.weather) ? (
-                  <WeatherCard weather={siteDetails.weather} />
-                ) : null}
-
-                <View style={styles.kpiGrid}>
-                  <KpiTile
-                    icon="hardware-chip-outline"
-                    label="Robots"
-                    value={`${onlineRobots}/${siteDetails.robots.length}`}
-                    hint={`${offlineRobots} offline`}
-                    accent={colors.primary}
-                  />
-                  <KpiTile
-                    icon="sparkles-outline"
-                    label="Cleaning"
+                <View style={styles.statRow}>
+                  <Stat
+                    label="Cleaned"
                     value={siteDetails.cleaning.completed}
-                    hint=""
-                    accent={colors.primary}
-                    valueColor={colors.primary}
-                    hintNode={
-                      <Text style={styles.kpiHint} numberOfLines={1}>
-                        <Text style={{ color: colors.badge.warning.text }}>
-                          {siteDetails.cleaning.inprogress} running
-                        </Text>
-                        <Text style={{ color: colors.textMuted }}> · </Text>
-                        <Text style={{ color: colors.danger }}>
-                          {siteDetails.cleaning.failure} failed
-                        </Text>
-                      </Text>
-                    }
+                    tone={colors.badge.success.text}
                   />
-                  <KpiTile
-                    icon="wifi-outline"
+                  <Stat
+                    label="Running"
+                    value={siteDetails.cleaning.inprogress}
+                    tone={colors.badge.warning.text}
+                  />
+                  <Stat
+                    label="Failed"
+                    value={siteDetails.cleaning.failure}
+                    tone={colors.badge.error.text}
+                  />
+                </View>
+                <View style={styles.statRow}>
+                  <Stat
+                    label="Online / offline"
+                    parts={[
+                      { text: String(onlineRobots), tone: colors.badge.success.text },
+                      { text: "/", tone: colors.textSecondary },
+                      { text: String(offlineRobots), tone: colors.badge.error.text },
+                    ]}
+                  />
+                  <Stat
                     label="Gateways"
-                    value={`${onlineGateways}/${siteDetails.gateways.length}`}
-                    hint="online now"
-                    accent={colors.badge.info.text}
+                    parts={[
+                      { text: String(onlineGateways), tone: colors.badge.success.text },
+                      { text: "/", tone: colors.textSecondary },
+                      { text: String(offlineGateways), tone: colors.badge.error.text },
+                    ]}
                   />
-                  <KpiTile
-                    icon="battery-charging-outline"
-                    label="Battery"
+                  <Stat
+                    label="Avg battery"
                     value={avgBattery != null ? `${avgBattery}%` : "—"}
-                    hint="site average"
-                    accent="#8B5CF6"
+                    tone={batteryTone(avgBattery)}
                   />
                 </View>
 
-                <QuickActions actions={quickActions} />
+                {weatherReady ? <WeatherCard weather={weather!} /> : null}
+
+                <View style={styles.heroActions}>
+                  <Pressable
+                    onPress={openBlockwise}
+                    style={[styles.heroPrimaryBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={styles.heroPrimaryText}>View blocks</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={openEmergencyStopConfirm}
+                    disabled={!canSendCommands || commandSending}
+                    style={[
+                      styles.heroStopBtn,
+                      {
+                        backgroundColor: colors.backgroundSecondary,
+                        opacity: canSendCommands ? 1 : 0.45,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.heroStopText, { color: colors.danger }]}>
+                      {commandSending ? "Sending…" : "Stop all"}
+                    </Text>
+                  </Pressable>
+                </View>
 
                 <GatewayMapCard
                   gateways={siteDetails.gateways}
@@ -639,13 +506,13 @@ export function DashboardScreen() {
                 <View
                   style={[
                     styles.panel,
-                    {
-                      backgroundColor: colors.backgroundSecondary,
-                      borderColor: colors.border,
-                    },
+                    { backgroundColor: colors.backgroundSecondary },
                   ]}
                 >
-                  <RobotBatterySummary robots={siteDetails.robots} />
+                  <RobotBatterySummary
+                    robots={siteDetails.robots}
+                    showTotals={false}
+                  />
                 </View>
 
                 <SectionHeader
@@ -657,10 +524,7 @@ export function DashboardScreen() {
                 <View
                   style={[
                     styles.panel,
-                    {
-                      backgroundColor: colors.backgroundSecondary,
-                      borderColor: colors.border,
-                    },
+                    { backgroundColor: colors.backgroundSecondary },
                   ]}
                 >
                   {siteDetails.gateways.length === 0 ? (
@@ -672,10 +536,7 @@ export function DashboardScreen() {
                       {gatewayPreview.map((gateway) => (
                         <View
                           key={gateway.gateway_id_in_lns_server}
-                          style={[
-                            styles.listRow,
-                            { borderBottomColor: colors.border },
-                          ]}
+                          style={styles.listRow}
                         >
                           <View style={styles.listRowTop}>
                             <Text
@@ -718,10 +579,7 @@ export function DashboardScreen() {
                 <View
                   style={[
                     styles.panel,
-                    {
-                      backgroundColor: colors.backgroundSecondary,
-                      borderColor: colors.border,
-                    },
+                    { backgroundColor: colors.backgroundSecondary },
                   ]}
                 >
                   {siteDetails.blockWiseCleaning.length === 0 ? (
@@ -734,7 +592,6 @@ export function DashboardScreen() {
                         key={block.block}
                         style={[
                           styles.listRow,
-                          { borderBottomColor: colors.border },
                         ]}
                       >
                         <View style={styles.listRowTop}>
@@ -763,127 +620,190 @@ export function DashboardScreen() {
           </>
         )}
       </Screen>
+
+      <Modal
+        visible={siteMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSiteMenuOpen(false)}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setSiteMenuOpen(false)}
+          />
+          <View
+            style={[
+              styles.siteSheet,
+              { backgroundColor: colors.backgroundSecondary },
+            ]}
+          >
+            <Text style={[styles.siteSheetTitle, { color: colors.textPrimary }]}>
+              Sites
+            </Text>
+            <ScrollView style={styles.siteList} bounces={false}>
+              {assignedSites.map((site) => {
+                const active = site.site_id === selectedSite?.site_id;
+                return (
+                  <Pressable
+                    key={site.site_id}
+                    onPress={() => {
+                      setSelectedSite(site);
+                      setSiteMenuOpen(false);
+                    }}
+                    style={[
+                      styles.siteRow,
+                      {
+                        backgroundColor: active
+                          ? colors.backgroundTertiary
+                          : "transparent",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.siteRowText,
+                        { color: colors.textPrimary, fontWeight: active ? "700" : "500" },
+                      ]}
+                    >
+                      {site.site_id}
+                    </Text>
+                    {active ? (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1 },
-  hero: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  greetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
     marginTop: spacing.sm,
     marginBottom: spacing.md,
-    gap: 6,
   },
-  heroHello: {
-    ...typography.caption,
-    color: "rgba(255,255,255,0.78)",
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
-  heroSite: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: "800",
-    color: "#FFFFFF",
-  },
-  heroMeta: {
+  welcomeHello: {
     ...typography.bodySmall,
-    color: "rgba(255,255,255,0.82)",
+    fontWeight: "600",
+    flexShrink: 0,
+  },
+  siteButton: {
+    flexShrink: 1,
+    maxWidth: "62%",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  siteButtonText: {
+    ...typography.bodySmall,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  statRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  stat: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderRadius: radius.md,
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    gap: 0,
+  },
+  statLabel: {
+    ...typography.caption,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    width: "100%",
+  },
+  statValue: {
+    fontSize: 17,
+    lineHeight: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    width: "100%",
+  },
+  modalRoot: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(16, 25, 54, 0.45)",
+  },
+  siteSheet: {
+    borderRadius: radius.md,
+    padding: spacing.md,
+    maxHeight: "70%",
+  },
+  siteSheetTitle: {
+    ...typography.h3,
+    fontSize: 16,
+    marginBottom: spacing.sm,
+  },
+  siteList: {
+    flexGrow: 0,
+  },
+  siteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  siteRowText: {
+    ...typography.bodySmall,
+    flex: 1,
   },
   heroActions: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   heroPrimaryBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#5EEAD4",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
   },
   heroPrimaryText: {
     ...typography.label,
     color: "#042F2E",
-    fontWeight: "800",
-  },
-  heroStopBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "rgba(254,202,202,0.45)",
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 7,
-  },
-  heroStopText: {
-    ...typography.caption,
-    color: "#FECACA",
     fontWeight: "700",
   },
-  sitePickerRow: {
-    gap: spacing.xs,
-    paddingBottom: spacing.md,
-  },
-  siteChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    maxWidth: 180,
-  },
-  siteChipText: {
-    ...typography.caption,
-    fontWeight: "600",
-  },
-  kpiGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  kpiTile: {
-    minWidth: "47%",
-    flex: 1,
-    borderWidth: 1,
+  heroStopBtn: {
     borderRadius: radius.md,
-    padding: spacing.md,
-    gap: 4,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 9,
   },
-  kpiIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 2,
-  },
-  kpiLabel: {
-    ...typography.caption,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  kpiValue: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: "800",
-  },
-  kpiHint: {
-    ...typography.caption,
-    fontSize: 11,
-    fontWeight: "500",
+  heroStopText: {
+    ...typography.label,
+    fontWeight: "700",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -908,40 +828,13 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontWeight: "700",
   },
-  quickRow: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-  },
-  quickTile: {
-    width: 84,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    alignItems: "center",
-    gap: 6,
-  },
-  quickIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  quickLabel: {
-    ...typography.caption,
-    fontSize: 11,
-    fontWeight: "700",
-  },
   panel: {
-    borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
   listRow: {
     paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 2,
   },
   listRowTop: {
@@ -967,7 +860,6 @@ const styles = StyleSheet.create({
   },
   messageCard: {
     marginTop: spacing.lg,
-    borderWidth: 1,
     borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm,

@@ -5,7 +5,11 @@ import { UpdateTimerScreen } from '../screens/UpdateTimerScreen';
 
 export type TimersStackParamList = {
   TimersList: undefined;
-  UpdateTimer: { timerId: string };
+  UpdateTimer: {
+    timerId?: string;
+    timerIds?: string[];
+    blocks?: { siteId: string; block: string }[];
+  };
 };
 
 const Stack = createNativeStackNavigator<TimersStackParamList>();

@@ -218,6 +218,7 @@ export function RobotOperatingScreen() {
   const [activeTab, setActiveTab] = useState<OperatingTab>("overview");
 
   const canSendCommands = user?.robot_command_access !== false;
+  const blockLabel = robot?.block || block || '';
 
   const loadRobot = useCallback(
     async (isRefresh = false) => {
@@ -327,7 +328,7 @@ export function RobotOperatingScreen() {
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <Navbar
         title="Robot Operating"
-        subtitle={`${robotNo} · ${block}`}
+        subtitle={blockLabel ? `${robotNo} · ${blockLabel}` : robotNo}
         showMenu={false}
         leftAction={
           <Pressable
@@ -358,7 +359,7 @@ export function RobotOperatingScreen() {
         <Text
           style={[styles.breadcrumbCurrent, { color: colors.textSecondary }]}
         >
-          {block}
+          {blockLabel || siteName || siteId}
         </Text>
       </View>
 
